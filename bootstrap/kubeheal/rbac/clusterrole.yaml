@@ -1,0 +1,35 @@
+---
+# ClusterRole granting the KubeHeal coordination engine read access
+# to resources in the parasol-insurance namespace.
+#
+# This follows least-privilege (ADR-030). The coordination engine
+# needs to observe and remediate pods in application namespaces
+# that it does not own -- proving cross-namespace self-healing.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeheal-parasol-insurance-access
+  labels:
+    app.kubernetes.io/part-of: kubeheal-demo
+    app.kubernetes.io/component: rbac
+rules:
+  # Read pods, events, and services for anomaly detection
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  # Read and manage deployments for remediation (restart, scale)
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  # Read pod metrics for resource analysis
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Delete pods for forced restart remediation
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  # Manage network policies for network partition remediation
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "delete"]

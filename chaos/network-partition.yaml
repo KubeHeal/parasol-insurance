@@ -1,0 +1,39 @@
+---
+# network-partition.yaml — Block Parasol app from reaching its PostgreSQL database
+#
+# Triggers: ParasolDBConnectionFailure alert
+# Expected: Coordination engine detects connection errors, removes this NetworkPolicy
+#
+# Apply:  oc apply -f chaos/network-partition.yaml -n parasol-insurance
+# Remove: oc delete -f chaos/network-partition.yaml -n parasol-insurance
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chaos-block-db-access
+  namespace: parasol-insurance
+  labels:
+    app.kubernetes.io/part-of: kubeheal-demo
+    chaos-injection: "true"
+spec:
+  podSelector:
+    matchLabels:
+      app: ic-app
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS only -- block everything else including the database
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow traffic to the KServe endpoint (not the database)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: self-healing-platform
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Explicitly NO rule for port 5432 = database blocked

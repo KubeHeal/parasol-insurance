@@ -1,0 +1,26 @@
+---
+# RoleBinding granting the coordination engine's ServiceAccount
+# (from the platform namespace) access to the parasol-insurance namespace.
+#
+# This is the cross-namespace bridge: the SA lives in self-healing-platform,
+# but the RoleBinding is scoped to parasol-insurance -- proving the
+# platform can heal apps in namespaces it does not own.
+#
+# To point to a different platform namespace, change the subjects[0].namespace below.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeheal-coordination-engine
+  namespace: parasol-insurance
+  labels:
+    app.kubernetes.io/part-of: kubeheal-demo
+    app.kubernetes.io/component: rbac
+subjects:
+  - kind: ServiceAccount
+    name: self-healing-operator
+    # The platform namespace -- change this if your platform lives elsewhere
+    namespace: self-healing-platform
+roleRef:
+  kind: ClusterRole
+  name: kubeheal-parasol-insurance-access
+  apiGroup: rbac.authorization.k8s.io

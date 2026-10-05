@@ -16,6 +16,10 @@ spec:
       labels:
         app: ic-app
         deployment: ic-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "5000"
     spec:
       containers:
         - name: insurance-claim-app
@@ -87,7 +91,13 @@ spec:
               value: california_driver_handbook_1_0
             - name: MAX_RETRIEVED_DOCS
               value: '4'
-          resources: {}
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           imagePullPolicy: Always

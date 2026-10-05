@@ -1,0 +1,111 @@
+---
+# PrometheusRule for Parasol Insurance application
+# Alerts the KubeHeal coordination engine when the demo app shows
+# anomalous behavior -- enabling the self-healing loop.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: parasol-insurance-alerts
+  namespace: parasol-insurance
+  labels:
+    app: parasol-insurance
+    app.kubernetes.io/part-of: kubeheal-demo
+    app.kubernetes.io/component: monitoring
+spec:
+  groups:
+    - name: parasol-insurance.rules
+      rules:
+        # High error rate on Parasol app HTTP endpoints
+        - alert: ParasolHighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{namespace="parasol-insurance", code=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{namespace="parasol-insurance"}[5m]))
+            ) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+            namespace: parasol-insurance
+            app: parasol-insurance
+          annotations:
+            summary: "Parasol Insurance error rate above 5%"
+            description: "The Parasol Insurance application in namespace {{ $labels.namespace }} has an HTTP 5xx error rate of {{ $value | humanizePercentage }} over the last 5 minutes."
+            runbook_url: "https://github.com/KubeHeal/parasol-insurance/blob/kubeheal-main/chaos/README.md"
+
+        # High request latency
+        - alert: ParasolHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{namespace="parasol-insurance"}[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            namespace: parasol-insurance
+            app: parasol-insurance
+          annotations:
+            summary: "Parasol Insurance p95 latency above 2s"
+            description: "The Parasol Insurance application p95 latency is {{ $value }}s."
+
+        # OOM risk -- container approaching memory limit
+        - alert: ParasolOOMRisk
+          expr: |
+            (
+              container_memory_working_set_bytes{namespace="parasol-insurance", container="insurance-claim-app"}
+              /
+              container_spec_memory_limit_bytes{namespace="parasol-insurance", container="insurance-claim-app"}
+            ) > 0.85
+          for: 1m
+          labels:
+            severity: critical
+            namespace: parasol-insurance
+            app: parasol-insurance
+          annotations:
+            summary: "Parasol Insurance container near OOM"
+            description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of its memory limit."
+
+        # Pod crash looping
+        - alert: ParasolCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="parasol-insurance"}[10m]) > 3
+          for: 0m
+          labels:
+            severity: critical
+            namespace: parasol-insurance
+            app: parasol-insurance
+          annotations:
+            summary: "Parasol Insurance pod crash looping"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value }} times in the last 10 minutes."
+
+        # Database connection failures
+        - alert: ParasolDBConnectionFailure
+          expr: |
+            up{namespace="parasol-insurance", job="parasol-insurance"} == 0
+            or
+            kube_deployment_status_replicas_available{namespace="parasol-insurance", deployment="claimdb"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            namespace: parasol-insurance
+            app: parasol-insurance
+          annotations:
+            summary: "Parasol Insurance database unreachable"
+            description: "The PostgreSQL database for Parasol Insurance is not available."
+
+        # CPU throttling
+        - alert: ParasolCPUThrottling
+          expr: |
+            (
+              sum(rate(container_cpu_cfs_throttled_seconds_total{namespace="parasol-insurance", container="insurance-claim-app"}[5m]))
+              /
+              sum(rate(container_cpu_usage_seconds_total{namespace="parasol-insurance", container="insurance-claim-app"}[5m]))
+            ) > 0.25
+          for: 5m
+          labels:
+            severity: warning
+            namespace: parasol-insurance
+            app: parasol-insurance
+          annotations:
+            summary: "Parasol Insurance container CPU throttled"
+            description: "Container {{ $labels.container }} is being CPU-throttled {{ $value | humanizePercentage }} of the time."

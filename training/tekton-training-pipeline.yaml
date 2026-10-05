@@ -1,0 +1,195 @@
+---
+# Tekton Pipeline: Train Parasol Insurance Anomaly Detection Model
+#
+# Executes the training notebook, validates the output model, and optionally
+# creates/updates a KServe InferenceService for the parasol-anomaly-detector.
+#
+# Usage:
+#   tkn pipeline start parasol-model-training-pipeline \
+#     -p git-url=https://github.com/KubeHeal/parasol-insurance.git \
+#     -p git-ref=kubeheal-main \
+#     -p data-source=synthetic \
+#     -n self-healing-platform --showlog
+#
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: parasol-model-training-pipeline
+  namespace: self-healing-platform
+  labels:
+    app.kubernetes.io/part-of: kubeheal-demo
+spec:
+  description: >
+    Train an Isolation Forest model on Parasol Insurance container metrics,
+    validate the model, and deploy it as a KServe InferenceService.
+  params:
+    - name: git-url
+      type: string
+      default: "https://github.com/KubeHeal/parasol-insurance.git"
+      description: "Git repository URL"
+    - name: git-ref
+      type: string
+      default: "kubeheal-main"
+      description: "Git branch or tag"
+    - name: data-source
+      type: string
+      default: "synthetic"
+      description: "Data source mode: synthetic | prometheus | hybrid"
+    - name: training-hours
+      type: string
+      default: "168"
+      description: "Hours of Prometheus data to collect"
+    - name: model-name
+      type: string
+      default: "parasol-anomaly-detector"
+      description: "Model name for KServe InferenceService"
+    - name: parasol-namespace
+      type: string
+      default: "parasol-insurance"
+      description: "Namespace where Parasol Insurance is deployed"
+
+  workspaces:
+    - name: shared-workspace
+      description: "Shared storage for git clone and model artifacts"
+    - name: model-storage
+      description: "PVC for persisting trained models"
+
+  tasks:
+    # Step 1: Clone the parasol-insurance repo
+    - name: git-clone
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-ref)
+        - name: deleteExisting
+          value: "true"
+
+    # Step 2: Execute the training notebook
+    - name: train-model
+      runAfter:
+        - git-clone
+      taskSpec:
+        workspaces:
+          - name: source
+          - name: models
+        params:
+          - name: data-source
+          - name: training-hours
+          - name: parasol-namespace
+          - name: model-name
+        steps:
+          - name: run-notebook
+            image: quay.io/modh/odh-minimal-notebook-container:v2-2024a-20240523
+            workingDir: $(workspaces.source.path)
+            env:
+              - name: DATA_SOURCE
+                value: $(params.data-source)
+              - name: TRAINING_HOURS
+                value: $(params.training-hours)
+              - name: PARASOL_NAMESPACE
+                value: $(params.parasol-namespace)
+              - name: MODEL_NAME
+                value: $(params.model-name)
+            script: |
+              #!/bin/bash
+              set -euo pipefail
+              echo "=========================================="
+              echo "Training Parasol anomaly detection model"
+              echo "  Data source : ${DATA_SOURCE}"
+              echo "  Model name  : ${MODEL_NAME}"
+              echo "=========================================="
+
+              pip install --quiet papermill scikit-learn pandas numpy joblib
+
+              # Create model output directory on model PVC
+              mkdir -p "$(workspaces.models.path)/${MODEL_NAME}"
+
+              # Symlink so notebook writes to the model PVC
+              mkdir -p /mnt/models
+              ln -sf "$(workspaces.models.path)/${MODEL_NAME}" "/mnt/models/${MODEL_NAME}"
+
+              papermill \
+                training/train-parasol-anomaly-model.ipynb \
+                /tmp/training-output.ipynb \
+                -p DATA_SOURCE "${DATA_SOURCE}" \
+                -p TRAINING_HOURS "${TRAINING_HOURS}" \
+                -p PARASOL_NAMESPACE "${PARASOL_NAMESPACE}" \
+                -p MODEL_NAME "${MODEL_NAME}"
+
+              echo "✓ Training notebook completed"
+              ls -la "$(workspaces.models.path)/${MODEL_NAME}/"
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: models
+          workspace: model-storage
+      params:
+        - name: data-source
+          value: $(params.data-source)
+        - name: training-hours
+          value: $(params.training-hours)
+        - name: parasol-namespace
+          value: $(params.parasol-namespace)
+        - name: model-name
+          value: $(params.model-name)
+
+    # Step 3: Validate the trained model
+    - name: validate-model
+      runAfter:
+        - train-model
+      taskSpec:
+        workspaces:
+          - name: models
+        params:
+          - name: model-name
+        steps:
+          - name: validate
+            image: quay.io/modh/odh-minimal-notebook-container:v2-2024a-20240523
+            script: |
+              #!/bin/bash
+              set -euo pipefail
+              MODEL_NAME="$(params.model-name)"
+              MODEL_PATH="$(workspaces.models.path)/${MODEL_NAME}/model.pkl"
+
+              echo "=========================================="
+              echo "Validating model: ${MODEL_PATH}"
+              echo "=========================================="
+
+              if [ ! -f "${MODEL_PATH}" ]; then
+                echo "✗ ERROR: Model file not found"
+                exit 1
+              fi
+
+              FILE_SIZE=$(stat -c%s "${MODEL_PATH}")
+              echo "  File size: ${FILE_SIZE} bytes"
+
+              if [ "${FILE_SIZE}" -lt 1000 ]; then
+                echo "✗ ERROR: Model file suspiciously small"
+                exit 1
+              fi
+
+              pip install --quiet scikit-learn joblib numpy
+
+              python3 -c "
+              import joblib, numpy as np
+              model = joblib.load('${MODEL_PATH}')
+              print(f'  Model type : {type(model).__name__}')
+              print(f'  Steps      : {[s[0] for s in model.steps]}')
+              test = np.random.randn(5, 9)
+              pred = model.predict(test)
+              print(f'  Test pred  : {pred}')
+              print('✓ Model validation passed')
+              "
+      workspaces:
+        - name: models
+          workspace: model-storage
+      params:
+        - name: model-name
+          value: $(params.model-name)

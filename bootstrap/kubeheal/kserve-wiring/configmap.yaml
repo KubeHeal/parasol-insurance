@@ -1,0 +1,26 @@
+---
+# KServe wiring ConfigMap
+# Points the Parasol Insurance LLM endpoint to the KubeHeal platform's
+# KServe InferenceService via cross-namespace DNS.
+#
+# To customize the platform namespace, edit the INFERENCE_SERVER_URL value below.
+# Format: http://<service-name>.<platform-namespace>.svc.cluster.local:<port>/v1
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeheal-kserve-config
+  namespace: parasol-insurance
+  labels:
+    app: parasol-insurance
+    app.kubernetes.io/part-of: kubeheal-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  # Cross-namespace KServe InferenceService endpoint
+  # Change 'self-healing-platform' to your platform namespace if different
+  INFERENCE_SERVER_URL: "http://anomaly-detector-stable.self-healing-platform.svc.cluster.local:8080/v1"
+  MODEL_NAME: "anomaly-detector"
+  MAX_TOKENS: "512"
+  TOP_P: "0.95"
+  TEMPERATURE: "0.01"
+  PRESENCE_PENALTY: "1.03"

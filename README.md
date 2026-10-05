@@ -1,5 +1,36 @@
 # Parasol Insurance Workshop
 
+> **KubeHeal Integration** — This fork ([`kubeheal-main` branch](https://github.com/KubeHeal/parasol-insurance/tree/kubeheal-main))
+> adds cross-namespace self-healing integration with the
+> [OpenShift AI Ops Self-Healing Platform](https://github.com/KubeHeal/openshift-aiops-platform).
+>
+> **Quick Start:**
+>
+> ```bash
+> # 1. Deploy Parasol Insurance
+> oc apply -k bootstrap/ic-shared-app/base/
+>
+> # 2. Deploy KubeHeal integration (RBAC, monitoring, KServe wiring)
+> oc apply -k bootstrap/kubeheal/
+>
+> # 3. Inject a fault and watch self-healing
+> ./chaos/memory-leak.sh
+> ```
+>
+> **Full Tutorial:** [Cross-Namespace Self-Healing Demo](https://github.com/KubeHeal/openshift-aiops-platform/blob/main/docs/tutorials/cross-namespace-self-healing-demo.md)
+>
+> **What's added on this branch:**
+>
+> | Directory | Purpose |
+> |-----------|---------|
+> | `bootstrap/kubeheal/` | Kustomize overlay: RBAC, ServiceMonitor, PrometheusRule, KServe wiring |
+> | `chaos/` | 5 fault injection scripts (memory-leak, cpu-spike, crash-loop, disk-pressure, network-partition) |
+> | `training/` | Jupyter notebook + Tekton pipeline for Parasol-specific anomaly model |
+> | `models/` | Pre-trained baseline Isolation Forest model |
+> | `export/` | Model promotion scripts (S3, OCI) |
+
+---
+
 ## Introduction
 
 This repository contains the code, instructions, resources and materials associated with the Lab called **Parasol Insurance Workshop**.

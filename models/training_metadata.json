@@ -1,0 +1,25 @@
+{
+  "model_name": "parasol-anomaly-detector",
+  "model_type": "IsolationForest",
+  "training_date": "2026-10-05T18:25:52.762159",
+  "data_source": "synthetic",
+  "n_samples": 5000,
+  "n_features": 9,
+  "features": [
+    "cpu_usage",
+    "memory_usage",
+    "memory_limit",
+    "restarts",
+    "network_rx",
+    "network_tx",
+    "memory_utilization",
+    "network_ratio",
+    "cpu_memory_product"
+  ],
+  "contamination": 0.1,
+  "n_estimators": 200,
+  "sklearn_pipeline_steps": [
+    "StandardScaler",
+    "IsolationForest"
+  ]
+}
