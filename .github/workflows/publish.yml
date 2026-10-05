@@ -1,7 +1,7 @@
 name: Publish to GitHub Pages
 on:
   push:
-    branches: [main]
+    branches: [main, kubeheal-main]
   workflow_dispatch:
 concurrency:
   group: pages
@@ -19,8 +19,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: main
+
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
@@ -32,19 +31,9 @@ jobs:
       - name: Generate Site
         run: npx antora default-site.yml
 
-      - name: Debug directory structure
-        run: |
-          echo "Current working directory:"
-          pwd
-          echo "List all files and directories:"
-          ls -alR .
-
       - name: Setup Pages
         uses: actions/configure-pages@v4
-      - name: find where the files are
-        run: |
-          pwd
-          #ls -alR .
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
