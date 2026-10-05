@@ -1,0 +1,92 @@
+= Explore Monitoring and Alerts
+include::_attributes.adoc[]
+
+[quote]
+____
+In xref:06-01-potential-imp-ref.adoc[Section 6.1]: _"There was no performance testing done. If too many users connect at the same time, it might overwhelm either the app, the database, the LLM..."_
+____
+
+Now that the integration overlay is deployed, Prometheus is already scraping the {company-name} application's metrics. Let's see what it's collecting.
+
+== Step 1: Check Monitoring Resources
+
+[source,terminal]
+----
+oc get servicemonitor,prometheusrule -n parasol-insurance
+----
+
+Expected output:
+
+[source,terminal]
+----
+NAME                                          AGE
+servicemonitor.monitoring.coreos.com/parasol-insurance   2m
+
+NAME                                                    AGE
+prometheusrule.monitoring.coreos.com/parasol-insurance-alerts   2m
+----
+
+== Step 2: View Metrics in the {ocp} Console
+
+. Open the {ocp} Console
+. Navigate to **Observe** > **Metrics**
+. In the query box, enter:
++
+[source,promql]
+----
+container_memory_working_set_bytes{namespace="parasol-insurance", container!=""}
+----
++
+. Click **Run Queries**
+
+You should see the memory usage for the `ic-app` and `claimdb` containers. Under normal load, `ic-app` uses approximately 150-200 MB.
+
+Try another query to see CPU usage:
+
+[source,promql]
+----
+rate(container_cpu_usage_seconds_total{namespace="parasol-insurance", container!=""}[5m])
+----
+
+== Step 3: Check Alert Rules
+
+. In the {ocp} Console, navigate to **Observe** > **Alerting** > **Alerting rules**
+. Search for `Parasol`
+
+You should see four rules:
+
+[cols="2,1,3"]
+|===
+| Alert | Severity | Condition
+
+| `ParasolOOMRisk`
+| Critical
+| Memory usage > 85% of limit for 1 minute
+
+| `ParasolCrashLooping`
+| Critical
+| Pod restarted > 3 times in 10 minutes
+
+| `ParasolCPUThrottling`
+| Warning
+| CPU throttled > 25% of the time for 5 minutes
+
+| `ParasolDBConnectionFailure`
+| Critical
+| Zero available replicas for the `claimdb` deployment for 1 minute
+|===
+
+All alerts should currently show as **Inactive** (green). We will change that in the next section!
+
+== Step 4: Query Metrics from a Notebook (Optional)
+
+If you want to explore the metrics programmatically, open the workbench and navigate to `lab-materials/07/07-03-explore-parasol-metrics.ipynb`.
+
+This notebook:
+
+* Connects to the in-cluster Prometheus API
+* Queries memory and CPU metrics for the `parasol-insurance` namespace
+* Displays the results as a pandas DataFrame
+* Shows summary statistics (mean, max, percentiles)
+
+Run through the cells to see the {company-name} application's resource profile. This baseline data is important -- it is what "normal" looks like. In the next section, we will deliberately make things abnormal.

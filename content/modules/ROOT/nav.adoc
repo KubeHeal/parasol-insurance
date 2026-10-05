@@ -40,5 +40,13 @@
 ** xref:06-01-potential-imp-ref.adoc[6.1 Potential improvements and refinements]
 ** xref:06-02-applicability-other.adoc[6.2 Applicability to other industries]
 
-* 7. End of Lab
-** xref:07-01-end-of-lab.adoc[7.1 Thanks]
+* 7. Making It Self-Healing
+** xref:07-01-self-healing-overview.adoc[7.1 Why Self-Healing?]
+** xref:07-02-deploy-kubeheal-integration.adoc[7.2 Deploy KubeHeal Integration]
+** xref:07-03-explore-monitoring.adoc[7.3 Explore Monitoring and Alerts]
+** xref:07-04-inject-faults.adoc[7.4 Inject Faults and Watch Self-Healing]
+** xref:07-05-train-anomaly-model.adoc[7.5 Train Anomaly Detection Model]
+** xref:07-06-model-promotion.adoc[7.6 Promote the Model to Production]
+
+* 8. End of Lab
+** xref:08-01-end-of-lab.adoc[8.1 Thanks]

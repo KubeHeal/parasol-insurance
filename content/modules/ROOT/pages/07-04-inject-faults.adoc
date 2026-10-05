@@ -1,0 +1,142 @@
+= Inject Faults and Watch Self-Healing
+include::_attributes.adoc[]
+
+[quote]
+____
+In xref:06-01-potential-imp-ref.adoc[Section 6.1]: _"Is our current application robust enough? Describe what scenarios might make it harder to use?"_
+____
+
+Let's find out. We are going to deliberately break the {company-name} application using chaos engineering scripts, and then watch the self-healing platform detect and fix each problem automatically.
+
+== Preparation
+
+Open **two terminals** side by side:
+
+* **Terminal 1** -- Watch pods in real time:
++
+[source,terminal]
+----
+oc get pods -n parasol-insurance -w
+----
+
+* **Terminal 2** -- Run the chaos scripts (from the parasol-insurance repository root)
+
+== Scenario 1: Memory Leak (OOMKill)
+
+This simulates what happens when a burst of concurrent claims processing pushes the application's memory toward its limit -- the exact scenario Section 6 warned about.
+
+In Terminal 2, run:
+
+[source,terminal]
+----
+./chaos/memory-leak.sh
+----
+
+*What happens:*
+
+. The script runs `stress --vm` inside the `ic-app` container
+. Memory usage climbs toward the 512 Mi limit
+. Prometheus scrapes the rising metric
+. The `ParasolOOMRisk` alert fires when usage exceeds 85%
+. The coordination engine receives the alert and queries the anomaly detection model
+. The model confirms the anomaly (high memory utilization feature)
+. The coordination engine **deletes the stressed pod**
+. The Deployment controller creates a fresh, healthy replacement
+
+In Terminal 1, you should see the pod transition from `Running` -> `Terminating` -> a new pod appear in `Running` state within 1-2 minutes.
+
+== Scenario 2: CPU Spike
+
+In Terminal 2, run:
+
+[source,terminal]
+----
+./chaos/cpu-spike.sh
+----
+
+This saturates all CPU cores in the container. The `ParasolCPUThrottling` alert fires and the coordination engine restarts the pod.
+
+== Scenario 3: Crash Loop
+
+In Terminal 2, run:
+
+[source,terminal]
+----
+./chaos/crash-loop.sh
+----
+
+This patches the deployment with an invalid command, causing the container to exit immediately on start. The pod enters `CrashLoopBackOff` and the `ParasolCrashLooping` alert fires.
+
+Watch Terminal 1 -- you should see several rapid restarts, then the coordination engine rolls back the deployment.
+
+To manually rollback if needed:
+
+[source,terminal]
+----
+./chaos/crash-loop.sh --rollback
+----
+
+== Scenario 4: Network Partition (Database Unreachable)
+
+In Terminal 2, apply the chaos NetworkPolicy:
+
+[source,terminal]
+----
+oc apply -f chaos/network-partition.yaml
+----
+
+This blocks all traffic from `ic-app` to `claimdb` on port 5432. The application can no longer process claims. The `ParasolDBConnectionFailure` alert fires and the coordination engine **removes the chaos NetworkPolicy** to restore connectivity.
+
+== Scenario 5: Disk Pressure
+
+In Terminal 2, run:
+
+[source,terminal]
+----
+./chaos/disk-pressure.sh
+----
+
+This fills the PostgreSQL PVC with data. The coordination engine detects the issue and remediates.
+
+To clean up manually:
+
+[source,terminal]
+----
+./chaos/disk-pressure.sh --cleanup
+----
+
+== Summary
+
+[cols="2,2,2,2"]
+|===
+| Script | What It Does | Alert Fired | Remediation
+
+| `memory-leak.sh`
+| Stress memory toward limit
+| `ParasolOOMRisk`
+| Pod restart
+
+| `cpu-spike.sh`
+| Saturate all CPU cores
+| `ParasolCPUThrottling`
+| Pod restart
+
+| `crash-loop.sh`
+| Patch deployment with bad command
+| `ParasolCrashLooping`
+| Deployment rollback
+
+| `network-partition.yaml`
+| Block app-to-database traffic
+| `ParasolDBConnectionFailure`
+| Delete chaos NetworkPolicy
+
+| `disk-pressure.sh`
+| Fill PostgreSQL PVC
+| Disk pressure alert
+| PVC cleanup + pod restart
+|===
+
+Every scenario in this table maps directly to a production failure mode that Section 6 asked us to worry about. The self-healing platform handles all of them without human intervention.
+
+In the next section, we'll train our own anomaly detection model specifically tuned to the {company-name} application's metrics.

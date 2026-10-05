@@ -1,0 +1,105 @@
+= Train Anomaly Detection Model
+include::_attributes.adoc[]
+
+[quote]
+____
+In Sections 3 and 4 we used AI/ML to improve the _business_ process (claim summarization, image recognition). Now we use the same techniques to improve the _operational_ process.
+____
+
+The self-healing platform ships with a baseline anomaly detection model, but we can do better. By training a model specifically on the {company-name} application's metrics, we get a detector that understands what "normal" looks like for _our_ workload.
+
+== The Algorithm: Isolation Forest
+
+We are using **Isolation Forest** -- the same unsupervised anomaly detection algorithm used in the platform's core detector. It works by randomly partitioning data: anomalies are isolated in fewer splits than normal points.
+
+The model is packaged as an **sklearn Pipeline** (StandardScaler + IsolationForest) so it can be served directly by KServe's sklearn server.
+
+== Step 1: Open the Training Notebook
+
+In your workbench, navigate to:
+
+[source,text]
+----
+lab-materials/07/07-05-train-anomaly-model.ipynb
+----
+
+== Step 2: Run the Notebook
+
+Execute each cell in order. The notebook will:
+
+. **Configure** the data source (synthetic by default, or Prometheus if the app has been running)
+. **Generate synthetic data** that mimics the five chaos scenarios you just ran:
+** OOM risk (high memory near limit)
+** CPU spike (sustained high CPU)
+** Crash loop (high restart count, low CPU/memory)
+** Network partition (very low network I/O)
+** Disk pressure (elevated memory + high network TX)
+. **Engineer features** including derived metrics:
+** `memory_utilization` = memory_usage / memory_limit
+** `network_ratio` = network_tx / network_rx
+** `cpu_memory_product` = cpu_usage x memory_utilization
+. **Train the Isolation Forest** with 200 estimators and 10% contamination rate
+. **Evaluate the model** -- you should see an F1 score above 0.6 (the quality gate)
+. **Save the model** as `model.pkl` with training metadata
+
+== Step 3: Inspect the Results
+
+After the notebook completes, check the output of the evaluation cell. You should see something like:
+
+[source,terminal]
+----
+Classification Report (synthetic ground truth):
+=======================================================
+              precision    recall  f1-score   support
+
+      Normal       0.97      0.92      0.94      4500
+     Anomaly       0.62      0.83      0.71       500
+
+    accuracy                           0.91      5000
+
+Confusion Matrix:
+  TN=4140  FP=360
+  FN=85    TP=415
+----
+
+The model correctly identifies most anomalies while keeping false positives manageable.
+
+== Step 4: Verify the Saved Model
+
+In a terminal, confirm the model file was created:
+
+[source,terminal]
+----
+ls -la /opt/app-root/src/models/parasol-anomaly-detector/
+----
+
+You should see:
+
+* `model.pkl` -- The trained sklearn Pipeline (~1.9 MB)
+* `training_metadata.json` -- Training parameters and feature list
+
+== What We Built
+
+[cols="1,2"]
+|===
+| Component | Details
+
+| **Algorithm**
+| Isolation Forest (sklearn)
+
+| **Pipeline**
+| StandardScaler -> IsolationForest
+
+| **Features**
+| 9 (cpu_usage, memory_usage, memory_limit, restarts, network_rx, network_tx, memory_utilization, network_ratio, cpu_memory_product)
+
+| **Training data**
+| 5000 synthetic samples mimicking the 5 chaos scenarios
+
+| **Output**
+| `model.pkl` ready for KServe serving
+|===
+
+This model can now be deployed as a KServe InferenceService. The coordination engine sends it a feature vector and the model returns `1` (normal) or `-1` (anomaly), driving the self-healing decision.
+
+In the next section, we'll promote this model from our development environment to production.

@@ -1,0 +1,103 @@
+= Promote the Model to Production
+include::_attributes.adoc[]
+
+[quote]
+____
+In xref:06-01-potential-imp-ref.adoc[Section 6.1]: _"It would be critical to have multiple instances (Dev/Test/UAT/Prod) of the application."_
+____
+
+You now have a trained anomaly detection model that understands the {company-name} application's metrics. But it only exists in your development workbench. To be useful in production, we need to **promote** it -- move the model artifact from this cluster to a production cluster where KServe can serve it.
+
+== The Promotion Workflow
+
+[source,text]
+----
+Dev/QA Cluster                  Artifact Store              Production Cluster
+┌────────────────┐             ┌──────────────┐            ┌────────────────────┐
+│ Train model    │──export────►│  S3 Bucket   │──import───►│ /mnt/models/<name> │
+│ Validate F1    │             │  OCI Registry│            │ KServe Predictor   │
+│ model.pkl      │             └──────────────┘            │ Restart rollout    │
+└────────────────┘                                         └────────────────────┘
+----
+
+Two transport options are available:
+
+* **S3** -- Sync the model directory to a shared S3 bucket (AWS, NooBaa, MinIO)
+* **OCI** -- Package the model as an OCI artifact and push to a container registry (Quay, GHCR)
+
+== Option A: Export via S3
+
+The `export/export-to-s3.sh` script uploads the model directory:
+
+[source,terminal]
+----
+./export/export-to-s3.sh parasol-anomaly-detector my-model-bucket us-east-1
+----
+
+If your cluster uses NooBaa (ODF) for S3:
+
+[source,terminal]
+----
+export S3_ENDPOINT_URL="https://s3-openshift-storage.apps.your-cluster.example.com"
+./export/export-to-s3.sh parasol-anomaly-detector model-storage
+----
+
+On the production cluster, import:
+
+[source,terminal]
+----
+./export/import-model.sh --from-s3 \
+  --model-name parasol-anomaly-detector \
+  --bucket my-model-bucket \
+  --region us-east-1
+----
+
+== Option B: Export via OCI Registry
+
+[source,terminal]
+----
+./export/export-to-oci.sh parasol-anomaly-detector quay.io/myorg/models latest
+----
+
+On the production cluster:
+
+[source,terminal]
+----
+./export/import-model.sh --from-oci \
+  --model-name parasol-anomaly-detector \
+  --registry quay.io/myorg/models
+----
+
+== Restart the Predictor
+
+After importing, tell KServe to load the new model:
+
+[source,terminal]
+----
+oc rollout restart deployment \
+  -l serving.kserve.io/inferenceservice=parasol-anomaly-detector \
+  -n self-healing-platform
+----
+
+Verify:
+
+[source,terminal]
+----
+oc get inferenceservice parasol-anomaly-detector -n self-healing-platform
+----
+
+The `READY` column should show `True`.
+
+== What You Accomplished
+
+In this section you:
+
+. Identified the risks facing the {company-name} application in production (Section 6)
+. Deployed an AI-powered self-healing integration without modifying the application code
+. Watched the platform automatically detect and remediate five different failure scenarios
+. Trained your own anomaly detection model tuned to the {company-name} workload
+. Learned how to promote that model from development to production
+
+The same ML techniques that power the _business_ side of {company-name} (LLM summarization, image recognition) now also power the _operational_ side. The claims adjusters get a more reliable application, and the operations team gets fewer 2 AM pages.
+
+This is AI-powered operations -- **AIOps** -- applied to a real business application.

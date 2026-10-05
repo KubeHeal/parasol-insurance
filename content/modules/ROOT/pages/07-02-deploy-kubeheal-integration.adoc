@@ -1,0 +1,111 @@
+= Deploy KubeHeal Integration
+include::_attributes.adoc[]
+
+[quote]
+____
+In xref:06-01-potential-imp-ref.adoc[Section 6.1] we noted: _"Which parts seem to still be manual and time-consuming, and how could we automate them better?"_ The first step is wiring the {company-name} application into the self-healing platform.
+____
+
+== What Gets Deployed
+
+The KubeHeal integration overlay adds four resource groups to the `parasol-insurance` namespace without modifying the application itself:
+
+[cols="1,2"]
+|===
+| Resource | Purpose
+
+| **RBAC** (ClusterRole + RoleBinding)
+| Grants the coordination engine in `self-healing-platform` permission to read pods, events, and services -- and to restart deployments -- in our namespace
+
+| **ServiceMonitor**
+| Tells Prometheus to scrape the {company-name} app's `/metrics` endpoint every 15 seconds
+
+| **PrometheusRule**
+| Defines alert rules: `ParasolOOMRisk`, `ParasolCrashLooping`, `ParasolCPUThrottling`, `ParasolDBConnectionFailure`
+
+| **NetworkPolicy + ConfigMap**
+| Allows the {company-name} app to reach the platform's KServe InferenceService for LLM inference across namespaces
+|===
+
+== Step 1: Apply the Integration Overlay
+
+In a terminal, run:
+
+[source,terminal]
+----
+oc apply -k bootstrap/kubeheal/
+----
+
+You should see output similar to:
+
+[source,terminal]
+----
+configmap/parasol-kserve-config created
+networkpolicy/allow-parasol-to-platform created
+servicemonitor/parasol-insurance created
+prometheusrule/parasol-insurance-alerts created
+clusterrole/kubeheal-parasol-insurance-access created
+rolebinding/kubeheal-coordination-engine created
+----
+
+== Step 2: Verify RBAC
+
+Confirm that the self-healing platform's service account can now read pods in our namespace:
+
+[source,terminal]
+----
+oc auth can-i get pods \
+  --as=system:serviceaccount:self-healing-platform:self-healing-operator \
+  -n parasol-insurance
+----
+
+Expected output: `yes`
+
+Try a write operation too:
+
+[source,terminal]
+----
+oc auth can-i delete pods \
+  --as=system:serviceaccount:self-healing-platform:self-healing-operator \
+  -n parasol-insurance
+----
+
+Expected output: `yes` (the coordination engine needs this to restart unhealthy pods)
+
+== Step 3: Verify NetworkPolicy
+
+[source,terminal]
+----
+oc get networkpolicy -n parasol-insurance
+----
+
+You should see `allow-parasol-to-platform` in the list. Inspect it:
+
+[source,terminal]
+----
+oc describe networkpolicy allow-parasol-to-platform -n parasol-insurance
+----
+
+This policy allows egress from `ic-app` pods to the `self-healing-platform` namespace on port 8080 (KServe inference) and to PostgreSQL on port 5432.
+
+== Step 4: Verify ConfigMap
+
+[source,terminal]
+----
+oc get cm parasol-kserve-config -n parasol-insurance -o yaml
+----
+
+The `INFERENCE_SERVER_URL` should point to `http://anomaly-detector-stable.self-healing-platform.svc.cluster.local:8080/v1`.
+
+== Step 5: Confirm Application Health
+
+Make sure the {company-name} application is still running normally:
+
+[source,terminal]
+----
+oc get pods -n parasol-insurance
+----
+
+You should see `ic-app` and `claimdb` pods in `Running` state. The integration overlay does not restart or modify the existing pods.
+
+You're now wired in. In the next section we'll explore what the monitoring sees.

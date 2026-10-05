@@ -1,0 +1,79 @@
+= Why Self-Healing?
+include::_attributes.adoc[]
+
+[NOTE]
+====
+*Jumping in?* This section is self-contained. If you completed Sections 1-6, the application is already deployed. If you are starting here, make sure the {company-name} application is running in your namespace and the self-healing platform is deployed on the cluster. See the https://github.com/KubeHeal/openshift-aiops-platform[KubeHeal platform documentation,window=_blank] for setup instructions.
+====
+
+== The Problem We Identified
+
+In xref:06-01-potential-imp-ref.adoc[Section 6.1] we asked ourselves some hard questions about the prototype:
+
+[quote]
+____
+Is our current application robust enough? Describe what scenarios might make it harder to use?
+____
+
+[quote]
+____
+If too many users connect at the same time, it might overwhelm either the app, the database, the LLM...
+____
+
+[quote]
+____
+Which parts seem to still be manual and time-consuming, and how could we automate them better, to avoid human errors if we can?
+____
+
+These are not hypothetical concerns. In production, the {company-name} claims processing application **will** experience:
+
+* *Memory pressure* -- claim images and LLM responses consume memory; a burst of concurrent users can push containers toward their limits
+* *CPU spikes* -- image recognition and LLM inference are CPU-intensive; peak hours cause throttling
+* *Crash loops* -- a bad deployment or dependency failure can put pods into CrashLoopBackOff
+* *Database outages* -- network hiccups or disk pressure can cut the app off from PostgreSQL
+* *Cascading failures* -- one failing component degrades the entire claims workflow
+
+Today, a human operator would need to notice the problem, diagnose it, and fix it -- often at 2 AM. That is exactly the kind of *manual, time-consuming, error-prone* process Section 6 warned us about.
+
+== The Answer: AI-Powered Self-Healing
+
+What if the platform could detect these problems automatically, diagnose the root cause using the same ML techniques we learned in Sections 3 and 4, and fix the issue before a claims adjuster even notices?
+
+That is what https://github.com/KubeHeal/openshift-aiops-platform[KubeHeal,window=_blank] provides: a self-healing platform that uses **Isolation Forest anomaly detection** (the same algorithm family we used for fraud detection!) to monitor container metrics and automatically remediate problems.
+
+== Architecture
+
+The self-healing platform runs in its **own namespace** (`self-healing-platform`) and monitors our {company-name} application in a separate namespace. This is deliberate -- it proves the platform can heal applications it does not own.
+
+[source,text]
+----
+parasol-insurance namespace              self-healing-platform namespace
+┌────────────────────────────┐          ┌───────────────────────────────────┐
+│ ic-app (Flask + React)     │◄──heal───│ coordination-engine (Go)          │
+│ claimdb (PostgreSQL)       │          │                                   │
+│ ServiceMonitor ────────────┼──scrape─►│ parasol-anomaly-detector          │
+│ PrometheusRule             │          │   (KServe InferenceService)       │
+└────────────────────────────┘          └───────────────────────────────────┘
+         │                                           ▲
+         └───── LLM inference (cross-ns DNS) ────────┘
+----
+
+The key integration points are:
+
+* **RBAC** -- A ClusterRole + RoleBinding grants the coordination engine permission to read pods/events and restart deployments in the `parasol-insurance` namespace
+* **ServiceMonitor** -- Prometheus scrapes the {company-name} app's `/metrics` endpoint every 15 seconds
+* **PrometheusRule** -- Alert rules fire when memory exceeds 85%, pods crash-loop, CPU is throttled, or the database becomes unreachable
+* **NetworkPolicy** -- Allows the {company-name} app to reach the platform's KServe inference endpoint across namespaces
+* **Coordination Engine** -- Receives alerts, queries the anomaly detection model for confirmation, and executes the appropriate remediation
+
+== What You Will Do
+
+In this section you will:
+
+1. **Deploy** the KubeHeal integration overlay onto your existing {company-name} application
+2. **Explore** the monitoring and alerting that was just created
+3. **Inject real faults** using chaos engineering scripts and watch the platform detect and fix them automatically
+4. **Train** your own anomaly detection model on {company-name}'s container metrics
+5. **Promote** the trained model from this development environment to a production cluster
+
+Let's get started!
