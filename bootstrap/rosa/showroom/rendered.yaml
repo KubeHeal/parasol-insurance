@@ -1,0 +1,394 @@
+---
+# Source: showroom-single-pod/templates/terminal/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: showroom
+  namespace: showroom
+
+---
+# Source: showroom-single-pod/templates/proxy/configmap-traefik-dynamic.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: showroom-traefik-dynamic
+  namespace: showroom
+data:
+  dynamic.yml: |
+    http:
+      routers:
+        showroom:
+          rule: "PathPrefix(`/`)"
+          entryPoints:
+            - web
+          service: showroom
+          priority: 1
+        terminal:
+          rule: "PathPrefix(`/terminal`)"
+          entryPoints:
+            - web
+          service: terminal
+          middlewares:
+            - terminal-stripprefix
+          priority: 10
+        wetty:
+          rule: "PathPrefix(`/wetty`)"
+          entryPoints:
+            - web
+          service: wetty
+          priority: 10
+
+      services:
+        showroom:
+          loadBalancer:
+            servers:
+              - url: "http://127.0.0.1:8000"
+        terminal:
+          loadBalancer:
+            servers:
+              - url: "http://127.0.0.1:7681"
+        wetty:
+          loadBalancer:
+            servers:
+              - url: "http://127.0.0.1:8001"
+      middlewares:
+        terminal-stripprefix:
+          stripPrefix:
+            prefixes:
+              - "/terminal"
+
+---
+# Source: showroom-single-pod/templates/proxy/configmap-traefik-static.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: showroom-traefik-static
+  namespace: showroom
+data:
+  traefik.yml: |
+    api:
+      dashboard: false
+      insecure: false
+    entryPoints:
+      web:
+        address: ":8080"
+    ping:
+      entryPoint: web
+    providers:
+      file:
+        filename: /etc/traefik/dynamic.yml
+        watch: false
+    log:
+      level: INFO
+    accessLog: {}
+    global:
+      checkNewVersion: false
+      sendAnonymousUsage: false
+
+---
+# Source: showroom-single-pod/templates/proxy/configmap-user-data.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: showroom-userdata
+  namespace: showroom
+data:
+  user_data.yml: |
+    bastion_password: from_helm
+    user: cluster-admin
+    guid: rosa
+    password: "Run rosa describe admin -c aiops-platform-lab for the login command. The password was printed once by rosa create admin and cannot be retrieved. If it was not saved, rosa delete admin and rosa create admin print a new one."
+    openshift_cluster_ingress_domain: apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com
+    openshift_console_url: https://console-openshift-console.apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com
+    rhoai_dashboard_url: https://rhods-dashboard-redhat-ods-applications.apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com
+    
+
+---
+# Source: showroom-single-pod/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: showroom-terminal-lab-user-home
+  namespace: showroom
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: "5Gi"
+
+---
+# Source: showroom-single-pod/templates/terminal/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: edit-showroom-sa
+  namespace: showroom
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+- kind: ServiceAccount
+  name: showroom
+  namespace: showroom
+
+---
+# Source: showroom-single-pod/templates/proxy/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: showroom
+  namespace: showroom
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: showroom
+
+---
+# Source: showroom-single-pod/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: showroom
+  namespace: showroom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: showroom
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: showroom
+      annotations:
+        checksum/traefik-static: 297fff016729602215489393e47b98788d47b8adb809684f79c1c711ef73ffe9
+        checksum/traefik-dynamic: f6dcea33a3791d53c09e0f49e9f40fab76132b681a89449a4ead47e1ac6a5fd5
+        checksum/userdata: 567a77d37b7b4115bc03857efdda6ec0c0d16598642b5ff8abe802e46b2381a9
+    spec:
+      serviceAccountName: showroom
+      initContainers:
+      - name: git-cloner
+        image: "quay.io/rhpds/git-cloner:v1.1.5"
+        env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/KubeHeal/parasol-insurance.git"
+        - name: GIT_REPO_REF
+          value: "kubeheal-main"
+        - name: CLONE_DIR
+          value: "/showroom/repo"
+        volumeMounts:
+        - mountPath: /showroom/repo
+          name: showroom-files
+          subPath: repo
+      - name: antora-builder
+        image: "quay.io/rhpds/antora:v1.3.0"
+        env:
+        - name: FILES_DIR
+          value: "/showroom/repo"
+        - name: OUTPUT_DIR
+          value: "/showroom/www"
+        - name: ANTORA_SITE_FILE
+          value: "default-site.yml"
+        - name: ANTORA_ENABLE_DEV_MODE
+          value: "false"
+        volumeMounts:
+        - mountPath: /showroom/repo
+          name: showroom-files
+          subPath: repo
+        - name: user-data
+          mountPath: /user_data/
+        - mountPath: /showroom/www
+          name: showroom-files
+          subPath: www
+      containers:
+      - name: traefik
+        image: "quay.io/rhpds/traefik:v3.7.9"
+        imagePullPolicy: "IfNotPresent"
+        args:
+        - "--configFile=/etc/traefik/traefik.yml"
+        volumeMounts:
+        - mountPath: /etc/traefik/traefik.yml
+          name: traefik-static
+          subPath: traefik.yml
+          readOnly: true
+        - mountPath: /etc/traefik/dynamic.yml
+          name: traefik-dynamic
+          subPath: dynamic.yml
+          readOnly: true
+        ports:
+        - name: web
+          containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+          requests:
+            cpu: 5m
+            memory: 16Mi
+
+      - name: content
+        image: "quay.io/rhpds/showroom-content:v1.4.3"
+        imagePullPolicy: "IfNotPresent"
+        env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/KubeHeal/parasol-insurance.git"
+        - name: GIT_REPO_REF
+          value: "kubeheal-main"
+        - name: ANTORA_PLAYBOOK
+          value: "default-site.yml"
+        - name: ZT_BUNDLE
+          value: "https://github.com/rhpds/nookbag/releases/download/nookbag-v0.5.1/nookbag-v0.5.1.zip"
+        - name: ZT_UI_ENABLED
+          value: "true"
+        - name: SHOWROOM_UI_CONFIG
+          value: ""
+        - name: SHOWROOM_ENABLE_DEV_MODE
+          value: "false"
+        - name: DOMAIN
+          value: "apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com"
+        - name: GUID
+          value: "rosa"
+        - name: USER
+          value: "cluster-admin"
+        volumeMounts:
+        - name: user-data
+          mountPath: /user_data/
+        - mountPath: /showroom/repo
+          name: showroom-files
+          subPath: repo
+        - mountPath: /showroom/www
+          name: showroom-files
+          subPath: www
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 100m
+            memory: 512Mi
+          requests:
+            cpu: 10m
+            memory: 128Mi
+      - name: terminal
+        image: "quay.io/rhpds/openshift-showroom-terminal-ocp:latest"
+        imagePullPolicy: "IfNotPresent"
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: GUID
+          value: "rosa"
+        volumeMounts:
+        - name: terminal-lab-user-home
+          mountPath: /home/lab-user
+        - name: terminal-data-ssh # to enable ssh out of the container
+          mountPath: /data/.ssh
+        ports:
+        - containerPort: 7681
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+      - name: wetty
+        image: "quay.io/rhpds/wetty:v3.2.1"
+        imagePullPolicy: "IfNotPresent"
+        args:
+        - --base="/wetty/"
+        - --port=8001
+        - --allow-iframe=true
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: GUID
+          value: "rosa"
+        ports:
+        - containerPort: 8001
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 500m
+            memory: 256Mi
+
+      volumes:
+      - name: showroom-files
+        emptyDir: {}
+      - name: user-data
+        configMap:
+          name: showroom-userdata
+      - name: traefik-static
+        configMap:
+          name: showroom-traefik-static
+      - name: traefik-dynamic
+        configMap:
+          name: showroom-traefik-dynamic
+      - name: terminal-data-ssh # to enable ssh out of the container
+        emptyDir: {}
+      - name: terminal-lab-user-home
+        persistentVolumeClaim:
+          claimName: showroom-terminal-lab-user-home
+
+---
+# Source: showroom-single-pod/templates/proxy/route.yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: showroom
+  namespace: showroom
+  annotations:
+    haproxy.router.openshift.io/timeout: 1h
+    haproxy.router.openshift.io/timeout-tunnel: 1h
+spec:
+  to:
+    kind: Service
+    name: showroom
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

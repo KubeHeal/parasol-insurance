@@ -11,7 +11,6 @@ asciidoc:
     experimental:
     numbered:
     lab_name: "Parasol Insurance AI Workshop"
-    guid: my-guid
     ssh_user: lab-user
     ssh_password: lab-user
     ssh_command: ssh lab-user@bastion.{guid}.example.opentlc.com
@@ -20,12 +19,6 @@ asciidoc:
     minio-endpoint: http://minio.ic-shared-minio.svc.cluster.local:9000/
     git-clone-repo-url: https://github.com/rh-aiservices-bu/parasol-insurance.git
     git-clone-repo-branch: main
-    user: userX
-    password: openshift
-    openshift_console_url: https://PLACEHOLDER-URL.com/
-    openshift_cluster_ingress_domain: PLACEHOLDER-URL.com
-    rhoai_dashboard_url: https://rhods-dashboard-redhat-ods-applications.{openshift_cluster_ingress_domain}/
-    login_command: oc login --insecure-skip-tls-verify=false -u userX -p openshift https://api.MYCLUSTER.com:6443"
     rhoai: "Red Hat OpenShift AI"
     rhoai-short: "RHOAI"
     ocp: "OpenShift Container Platform"
