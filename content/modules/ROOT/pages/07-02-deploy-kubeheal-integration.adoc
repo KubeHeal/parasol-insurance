@@ -27,6 +27,30 @@ The KubeHeal integration overlay adds four resource groups to the `parasol-insur
 | Allows the {company-name} app to reach the platform's KServe InferenceService for LLM inference across namespaces
 |===
 
+== Get the repository
+
+The commands in this section run from a checkout of the lab repository. The Showroom terminal does not include that checkout.
+
+[source,terminal]
+----
+cd ~
+if [ ! -d parasol-insurance/.git ]; then
+  git clone --branch kubeheal-main --single-branch \
+    https://github.com/KubeHeal/parasol-insurance.git
+fi
+cd parasol-insurance
+git status -sb
+----
+
+The clone runs only when `~/parasol-insurance` is missing. You should end in that directory, and the status line should name `kubeheal-main`:
+
+[source,terminal]
+----
+## kubeheal-main...origin/kubeheal-main
+----
+
+Stay in this directory for the rest of section 7. A new terminal needs `cd ~/parasol-insurance` before the later commands.
+
 On a ROSA cluster that already runs the self-healing platform, deploy the application into this same namespace first:
 
 [source,terminal]

@@ -27,6 +27,8 @@ Two transport options are available:
 
 == Option A: Export via S3
 
+Run the export commands from `~/parasol-insurance`, the checkout from section 7.2.
+
 The `export/export-to-s3.sh` script uploads the model directory:
 
 [source,terminal]

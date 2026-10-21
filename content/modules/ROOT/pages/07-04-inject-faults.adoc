@@ -19,7 +19,12 @@ Open **two terminals** side by side:
 oc get pods -n parasol-insurance -w
 ----
 
-* **Terminal 2** -- Run the chaos scripts (from the parasol-insurance repository root)
+* **Terminal 2** -- Run the chaos scripts from the repository root. If this is a new terminal:
++
+[source,terminal]
+----
+cd ~/parasol-insurance
+----
 
 Confirm each repair in the remediator log:
 
