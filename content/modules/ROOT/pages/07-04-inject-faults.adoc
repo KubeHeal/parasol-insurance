@@ -178,28 +178,67 @@ deployment.apps/ic-app rolled back
 
 == Scenario 4: Network Partition (Database Unreachable)
 
-In Terminal 2, apply the chaos NetworkPolicy:
+Pause `parasol-remediator` first. The alert window is about 30 seconds, and the repair would close it before a TCP check can fail.
 
 [source,terminal]
 ----
+oc scale deploy/parasol-remediator -n parasol-insurance --replicas=0
+oc get pods -n parasol-insurance -l app=parasol-remediator
+----
+
+[source,terminal]
+----
+deployment.apps/parasol-remediator scaled
+No resources found in parasol-insurance namespace.
+----
+
+Kubernetes unions every NetworkPolicy that selects `ic-app`. Delete the Postgres allow, then apply the chaos policy. The chaos object is what `ParasolDBConnectionFailure` watches. Removing `allow-ic-app-to-claimdb` is what closes port 5432.
+
+[source,terminal]
+----
+oc delete networkpolicy allow-ic-app-to-claimdb -n parasol-insurance
 oc apply -f chaos/network-partition.yaml
 ----
 
 [source,terminal]
 ----
+networkpolicy.networking.k8s.io "allow-ic-app-to-claimdb" deleted from parasol-insurance namespace
 networkpolicy.networking.k8s.io/chaos-block-db-access created
 ----
 
-This creates NetworkPolicy `chaos-block-db-access`, which blocks `ic-app` egress except DNS and the platform inference port. `ParasolDBConnectionFailure` fires while that policy exists, and `parasol-remediator` deletes it.
+From `ic-app`, the TCP check to `claimdb:5432` fails while that allow is gone:
+
+[source,terminal]
+----
+oc exec -n parasol-insurance deploy/ic-app -c insurance-claim-app -- python3 -c 'import socket; s=socket.socket(); s.settimeout(3); s.connect(("claimdb", 5432)); print("claimdb:5432 open")'
+----
+
+[source,terminal]
+----
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+socket.timeout: timed out
+command terminated with exit code 1
+----
+
+Scale the remediator back to 1. It deletes `chaos-block-db-access` and recreates `allow-ic-app-to-claimdb`.
+
+[source,terminal]
+----
+oc scale deploy/parasol-remediator -n parasol-insurance --replicas=1
+oc logs deploy/parasol-remediator -n parasol-insurance -f
+----
 
 [source,terminal]
 ----
 firing ParasolDBConnectionFailure
 >>> deleting chaos-block-db-access
 networkpolicy.networking.k8s.io "chaos-block-db-access" deleted from parasol-insurance namespace
+>>> restoring allow-ic-app-to-claimdb
+networkpolicy.networking.k8s.io/allow-ic-app-to-claimdb created
 ----
 
-The object is gone as soon as that delete succeeds:
+The chaos object is gone as soon as that delete succeeds:
 
 [source,terminal]
 ----
@@ -212,6 +251,22 @@ Error from server (NotFound): networkpolicies.networking.k8s.io "chaos-block-db-
 ----
 
 The console can still show the alert as **Firing** for a minute or two. `kube-state-metrics` drops the series after the object is gone, and only then does the rule return to **Inactive**.
+
+After the allow policy is back, the same TCP check succeeds:
+
+[source,terminal]
+----
+oc get networkpolicy allow-ic-app-to-claimdb -n parasol-insurance
+oc exec -n parasol-insurance deploy/ic-app -c insurance-claim-app -- python3 -c 'import socket; s=socket.socket(); s.settimeout(3); s.connect(("claimdb", 5432)); print("claimdb:5432 open")'
+----
+
+[source,terminal]
+----
+NAME                      POD-SELECTOR   AGE
+allow-ic-app-to-claimdb   app=ic-app     24s
+
+claimdb:5432 open
+----
 
 == Scenario 5: Disk Pressure
 

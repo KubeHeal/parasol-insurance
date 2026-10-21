@@ -1,0 +1,66 @@
+= Decide a Repair from the Model
+include::_attributes.adoc[]
+
+The five chaos repairs in section 7.4 stay on alert rules. This exercise is the one place the Isolation Forest chooses the action.
+
+Score `model.pkl` in the workbench. The script does not call Prometheus and does not call whatever weights KServe is serving. It loads the pipeline saved at `/opt/app-root/src/models/parasol-anomaly-detector/model.pkl`.
+
+The nine columns, in the training order, are `cpu_usage`, `memory_usage`, `memory_limit`, `restarts`, `network_rx`, `network_tx`, `memory_utilization`, `network_ratio`, and `cpu_memory_product`.
+
+A verdict of `1` means the vector looks normal. The script leaves `ic-app` running. A verdict of `-1` means the vector looks anomalous. The script deletes the `ic-app` pod, and a new one becomes `Running`.
+
+Run this from the clone in `~/parasol-insurance`.
+
+== Step 1: Normal vector
+
+Record the pod name, then score the normal vector. It sits at the center of the training range (about 180 MB of a 512 MB limit).
+
+[source,terminal]
+----
+bash lab-materials/07/decide.sh normal
+----
+
+[source,terminal]
+----
+vector=normal verdict=1
+ic-app pod before: ic-app-6f9fdc6c8c-2pvr4
+verdict 1: leaving ic-app running
+ic-app pod after: ic-app-6f9fdc6c8c-2pvr4 Running
+----
+
+The pod name does not change. Write down that name. It must match the next step's "before" line.
+
+== Step 2: Out-of-memory vector
+
+Score a vector whose memory utilization is above the training anomaly range (about 450 MB of the same 512 MB limit).
+
+[source,terminal]
+----
+bash lab-materials/07/decide.sh oom
+----
+
+[source,terminal]
+----
+vector=oom verdict=-1
+ic-app pod before: ic-app-6f9fdc6c8c-2pvr4
+pod "ic-app-6f9fdc6c8c-2pvr4" deleted from parasol-insurance namespace
+deployment "ic-app" successfully rolled out
+ic-app pod after: ic-app-6f9fdc6c8c-pdm8t Running
+----
+
+`verdict=-1` is what selects the delete. The new pod suffix is different, and the phase is `Running`. The suffix will not match this sample.
+
+Confirm the replacement yourself:
+
+[source,terminal]
+----
+oc get pods -n parasol-insurance -l app=ic-app
+----
+
+[source,terminal]
+----
+NAME                      READY   STATUS    RESTARTS   AGE
+ic-app-6f9fdc6c8c-pdm8t   1/1     Running   0          1s
+----
+
+`AGE` will not match. The pod suffix must differ from the name you wrote down in step 1.

@@ -82,6 +82,23 @@ rate(container_cpu_usage_seconds_total{namespace="parasol-insurance", container!
 
 At idle, `insurance-claim-app` is a small fraction of one core (about 0.002). The other containers are in the same range, except short bursts from `milvus`.
 
+The same series is available from the CLI. Thanos answers with JSON when the request carries a token. An HTML login page or `401` means the query missed the token.
+
+[source,terminal]
+----
+PROM=$(oc get route thanos-querier -n openshift-monitoring -o jsonpath='{.spec.host}')
+curl -sk -H "Authorization: Bearer $(oc whoami -t)" \
+  --data-urlencode 'query=container_memory_working_set_bytes{namespace="parasol-insurance",container="insurance-claim-app"}' \
+  "https://${PROM}/api/v1/query"
+----
+
+[source,terminal]
+----
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"container":"insurance-claim-app","namespace":"parasol-insurance"},"value":[1792613793.431,"954970112"]}]}}
+----
+
+`"status":"success"` and a numeric sample in `value` are the check. The live body includes more metric labels. The timestamp and byte count will differ.
+
 == Step 3: Check Alert Rules
 
 . In the {ocp} Console, navigate to **Observe** > **Alerting** > **Alerting rules**

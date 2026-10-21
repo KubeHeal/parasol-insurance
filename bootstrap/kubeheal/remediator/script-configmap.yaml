@@ -58,6 +58,31 @@ data:
     clear_network() {
       echo ">>> deleting chaos-block-db-access"
       oc delete networkpolicy chaos-block-db-access -n "${NS}" --ignore-not-found
+      echo ">>> restoring allow-ic-app-to-claimdb"
+      oc apply -n "${NS}" -f - <<'EOF'
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: allow-ic-app-to-claimdb
+      namespace: parasol-insurance
+      labels:
+        app: parasol-insurance
+        app.kubernetes.io/part-of: kubeheal-demo
+    spec:
+      podSelector:
+        matchLabels:
+          app: ic-app
+      policyTypes:
+        - Egress
+      egress:
+        - to:
+            - podSelector:
+                matchLabels:
+                  app: claimdb
+          ports:
+            - protocol: TCP
+              port: 5432
+    EOF
     }
 
     clear_disk() {

@@ -47,6 +47,7 @@
 ** xref:07-04-inject-faults.adoc[7.4 Inject Faults and Watch Self-Healing]
 ** xref:07-05-train-anomaly-model.adoc[7.5 Train Anomaly Detection Model]
 ** xref:07-06-model-promotion.adoc[7.6 Promote the Model to Production]
+** xref:07-07-model-decision.adoc[7.7 Decide a Repair from the Model]
 
 * 8. End of Lab
 ** xref:08-01-end-of-lab.adoc[8.1 Thanks]

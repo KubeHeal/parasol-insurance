@@ -5,10 +5,12 @@ kind: Kustomization
 resources:
   - kserve-wiring/configmap.yaml
   - kserve-wiring/networkpolicy.yaml
+  - kserve-wiring/allow-db-networkpolicy.yaml
   - monitoring/servicemonitor.yaml
   - monitoring/prometheusrule.yaml
   - rbac/clusterrole.yaml
   - rbac/rolebinding.yaml
+  - rbac/workbench-monitoring.yaml
   - remediator/serviceaccount.yaml
   - remediator/rbac.yaml
   - remediator/script-configmap.yaml

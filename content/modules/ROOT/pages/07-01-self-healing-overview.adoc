@@ -35,36 +35,37 @@ These are not hypothetical concerns. In production, the {company-name} claims pr
 
 Today, a human operator would need to notice the problem, diagnose it, and fix it -- often at 2 AM. That is exactly the kind of *manual, time-consuming, error-prone* process Section 6 warned us about.
 
-== The Answer: AI-Powered Self-Healing
+== The Answer: Hybrid Operations
 
-What if the platform could detect these problems automatically, diagnose the root cause using the same ML techniques we learned in Sections 3 and 4, and fix the issue before a claims adjuster even notices?
+This section shows two workflows that sit next to each other.
 
-That is what https://github.com/KubeHeal/openshift-aiops-platform[KubeHeal,window=_blank] provides: a self-healing platform that uses **Isolation Forest anomaly detection** (the same algorithm family we used for fraud detection!) to monitor container metrics and automatically remediate problems.
+The repairs you will watch in section 7.4 are rule-based. Prometheus alert rules notice memory pressure, CPU throttling, crash loops, a missing database allow, and disk pressure. `parasol-remediator` in the `parasol-insurance` namespace reads those firing alerts and runs a fixed action for each name: delete the `ic-app` pod, roll the deployment back, restore database egress, or delete the fill file.
+
+The Isolation Forest is a separate machine-learning workflow. You train it on {company-name} container metrics, save `model.pkl`, and then use one decision exercise where that model's verdict chooses whether to repair. The coordination engine in `self-healing-platform` does not subscribe to these five Parasol alerts, and `parasol-remediator` does not send metrics to the model.
 
 == Architecture
 
-The self-healing platform runs in its **own namespace** (`self-healing-platform`) and monitors our {company-name} application in a separate namespace. This is deliberate -- it proves the platform can heal applications it does not own.
+The self-healing platform runs in its **own namespace** (`self-healing-platform`). The {company-name} application, its alerts, and `parasol-remediator` stay in `parasol-insurance`.
 
 [source,text]
 ----
-parasol-insurance namespace              self-healing-platform namespace
-┌────────────────────────────┐          ┌───────────────────────────────────┐
-│ ic-app (Flask + React)     │◄──heal───│ coordination-engine (Go)          │
-│ claimdb (PostgreSQL)       │          │                                   │
-│ ServiceMonitor ────────────┼──scrape─►│ anomaly-detector                  │
-│ PrometheusRule             │          │   (KServe InferenceService)       │
-└────────────────────────────┘          └───────────────────────────────────┘
-         │                                           ▲
-         └───── LLM inference (cross-ns DNS) ────────┘
+parasol-insurance namespace                 self-healing-platform namespace
+┌──────────────────────────────────┐       ┌────────────────────────────────┐
+│ ic-app (Flask + React)           │       │ anomaly-detector               │
+│ claimdb (PostgreSQL)             │       │   (KServe InferenceService)    │
+│ ServiceMonitor ──scrape──► Prometheus    │                                │
+│ PrometheusRule                   │       │ coordination-engine (Go)       │
+│ parasol-remediator ──repairs──► pods     │   does not consume these alerts│
+└──────────────────────────────────┘       └────────────────────────────────┘
 ----
 
-The key integration points are:
+The key integration points for the rule-based repairs are:
 
-* **RBAC** -- A ClusterRole + RoleBinding grants the coordination engine permission to read pods/events and restart deployments in the `parasol-insurance` namespace
 * **ServiceMonitor** -- Prometheus scrapes the {company-name} app's `/metrics` endpoint every 15 seconds
-* **PrometheusRule** -- Alert rules fire when memory exceeds 85%, pods crash-loop, CPU is throttled, or the database becomes unreachable
-* **NetworkPolicy** -- Allows the {company-name} app to reach the platform's KServe inference endpoint across namespaces
-* **Coordination Engine** -- Receives alerts, queries the anomaly detection model for confirmation, and executes the appropriate remediation
+* **PrometheusRule** -- Alert rules fire when memory exceeds 85%, pods crash-loop, CPU is throttled, the database allow policy is removed, or the database volume fills
+* **parasol-remediator** -- Watches those five alerts and runs the matching repair
+* **NetworkPolicy** -- Allows `ic-app` to reach DNS, MinIO, Milvus, the in-namespace model server, PostgreSQL, and the platform namespace. The PostgreSQL allow is its own policy so a fault can remove it
+* **RBAC** -- Lets the coordination engine read pods in `parasol-insurance`. That binding is present. These five repairs do not go through that engine
 
 == What You Will Do
 
@@ -72,8 +73,9 @@ In this section you will:
 
 1. **Deploy** the KubeHeal integration overlay onto your existing {company-name} application
 2. **Explore** the monitoring and alerting that was just created
-3. **Inject real faults** using chaos engineering scripts and watch the platform detect and fix them automatically
-4. **Train** your own anomaly detection model on {company-name}'s container metrics
-5. **Promote** the trained model from this development environment to a production cluster
+3. **Inject real faults** and watch `parasol-remediator` repair them from alert rules
+4. **Train** an Isolation Forest on {company-name} container metrics
+5. **Promote** that saved model onto the shared model volume and MinIO
+6. **Decide a repair from the model verdict**, once for a normal vector and once for an out-of-memory vector
 
 Let's get started!

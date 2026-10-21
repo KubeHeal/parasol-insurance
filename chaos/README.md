@@ -19,7 +19,7 @@ in a namespace it does not own.
 | `cpu-spike.sh` | CPU saturation via a busy loop | `ParasolCPUThrottling` | `parasol-remediator` deletes the ic-app pod |
 | `crash-loop.sh` | Invalid command patch | `ParasolCrashLooping` | `parasol-remediator` rolls the deployment back |
 | `disk-pressure.sh` | Fill the PostgreSQL PVC past 70% | `ParasolDiskPressure` | `parasol-remediator` deletes the fill file |
-| `network-partition.yaml` | NetworkPolicy blocks DB | `ParasolDBConnectionFailure` | `parasol-remediator` removes the NetworkPolicy |
+| `network-partition.yaml` | Delete `allow-ic-app-to-claimdb`, then apply this policy | `ParasolDBConnectionFailure` | `parasol-remediator` deletes the chaos policy and restores the Postgres allow |
 
 ## Usage
 
@@ -28,6 +28,7 @@ in a namespace it does not own.
 ./chaos/memory-leak.sh
 
 # Apply network partition (and remove it)
+oc delete networkpolicy allow-ic-app-to-claimdb -n parasol-insurance
 oc apply -f chaos/network-partition.yaml -n parasol-insurance
 # To remove:
 oc delete -f chaos/network-partition.yaml -n parasol-insurance

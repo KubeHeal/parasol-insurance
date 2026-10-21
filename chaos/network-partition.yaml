@@ -1,10 +1,12 @@
 ---
-# network-partition.yaml — Block Parasol app from reaching its PostgreSQL database
+# network-partition.yaml — Alert marker for ParasolDBConnectionFailure.
 #
-# Triggers: ParasolDBConnectionFailure alert
-# Expected: parasol-remediator deletes this NetworkPolicy when ParasolDBConnectionFailure fires
+# NetworkPolicies are additive, so this object cannot revoke
+# allow-ic-app-to-claimdb. Delete that policy first, then apply this one.
+# parasol-remediator deletes this object and recreates the Postgres allow.
 #
-# Apply:  oc apply -f chaos/network-partition.yaml -n parasol-insurance
+# Apply:  oc delete networkpolicy allow-ic-app-to-claimdb -n parasol-insurance
+#          oc apply -f chaos/network-partition.yaml
 # Remove: oc delete -f chaos/network-partition.yaml -n parasol-insurance
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

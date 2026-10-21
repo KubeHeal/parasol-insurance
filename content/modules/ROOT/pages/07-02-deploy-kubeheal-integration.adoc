@@ -129,14 +129,15 @@ oc get networkpolicy -n parasol-insurance
 [source,terminal]
 ----
 NAME                        POD-SELECTOR   AGE
+allow-ic-app-to-claimdb     app=ic-app     6h1m
 allow-parasol-to-platform   app=ic-app     6h1m
 ----
 
-`AGE` will not match. Inspect the policy:
+`AGE` will not match. Inspect both policies:
 
 [source,terminal]
 ----
-oc describe networkpolicy allow-parasol-to-platform -n parasol-insurance
+oc describe networkpolicy allow-parasol-to-platform allow-ic-app-to-claimdb -n parasol-insurance
 ----
 
 [source,terminal]
@@ -156,9 +157,18 @@ Spec:
     To:
       NamespaceSelector: kubernetes.io/metadata.name=openshift-dns
     ----------
-    To Port: <any> (traffic allowed to all ports)
+    To Port: 9000/TCP
     To:
-      PodSelector: <none>
+      PodSelector: app=minio
+    ----------
+    To Port: 19530/TCP
+    To:
+      PodSelector: app=milvus
+    ----------
+    To Port: 8080/TCP
+    To Port: 80/TCP
+    To:
+      PodSelector: app=isvc.qwen-predictor
     ----------
     To Port: 8080/TCP
     To Port: 80/TCP
@@ -168,14 +178,31 @@ Spec:
     To Port: 443/TCP
     To: <any> (traffic not restricted by destination)
   Policy Types: Egress
+
+
+Name:         allow-ic-app-to-claimdb
+Namespace:    parasol-insurance
+Labels:       app=parasol-insurance
+              app.kubernetes.io/part-of=kubeheal-demo
+Spec:
+  PodSelector:     app=ic-app
+  Not affecting ingress traffic
+  Allowing egress traffic:
+    To Port: 5432/TCP
+    To:
+      PodSelector: app=claimdb
+  Policy Types: Egress
 ----
 
-Read that as four egress paths from `ic-app`:
+Read that as separate egress paths from `ic-app`:
 
 * DNS (ports 53 and 5353) to the `openshift-dns` namespace
-* Every port to pods in `parasol-insurance`. That is how `claimdb` on port 5432 stays reachable. There is no separate 5432 rule.
+* MinIO on port 9000, Milvus on port 19530, and the Qwen predictor on ports 8080 and 80
 * Ports 8080 and 80 to the `self-healing-platform` namespace (KServe inference)
 * Port 443 to any destination
+* PostgreSQL on port 5432, only in `allow-ic-app-to-claimdb`
+
+Kubernetes unions every NetworkPolicy that selects `ic-app`. The Postgres allow is its own object so section 7.4 can delete it. A second policy cannot take that path away while this one still exists.
 
 == Step 4: Verify ConfigMap
 

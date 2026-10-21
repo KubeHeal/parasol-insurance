@@ -35,9 +35,33 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Postgres and MinIO run in this namespace (ROSA overlay).
+    # In-namespace endpoints the app calls. Postgres is allow-ic-app-to-claimdb
+    # so a chaos step can remove that path without opening every port.
     - to:
-        - podSelector: {}
+        - podSelector:
+            matchLabels:
+              app: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: milvus
+      ports:
+        - protocol: TCP
+          port: 19530
+    # qwen-predictor Service port is 80 and the container port is 8080.
+    # OVN matches the port the client uses, so both stay open.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: isvc.qwen-predictor
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 80
     # Allow traffic to KServe InferenceService in the platform namespace
     - to:
         - namespaceSelector:
