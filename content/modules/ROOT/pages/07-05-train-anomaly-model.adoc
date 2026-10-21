@@ -87,6 +87,8 @@ The owner, timestamp, and exact byte count will differ. You should see:
 * `model.pkl` -- the trained sklearn Pipeline, about 1.6 MB
 * `training_metadata.json` -- training parameters and feature list
 
+The notebook writes that directory under `/opt/app-root/src/models/`. The shared model volume is a different path, `/mnt/models`, and it is already mounted in this workbench from `model-storage-pvc`. Section 7.6 copies the saved files onto that volume before promotion.
+
 == What We Built
 
 [cols="1,2"]

@@ -11,7 +11,11 @@ MODEL_NAME="${1:-parasol-anomaly-detector}"
 BUCKET="${2:-model-storage}"
 REGION="${3:-us-east-1}"
 
-MODEL_DIR="/mnt/models/${MODEL_NAME}"
+# Notebook output lives on the workbench at
+# /opt/app-root/src/models/${MODEL_NAME}. Copy it onto the shared
+# model volume (/mnt/models) before running this script. Override
+# MODEL_DIR when the files are in another local directory.
+MODEL_DIR="${MODEL_DIR:-/mnt/models/${MODEL_NAME}}"
 S3_PREFIX="s3://${BUCKET}/${MODEL_NAME}/"
 
 echo "============================================"
@@ -23,7 +27,9 @@ echo "============================================"
 
 if [ ! -f "${MODEL_DIR}/model.pkl" ]; then
   echo "✗ ERROR: ${MODEL_DIR}/model.pkl not found"
-  echo "  Train a model first with training/train-parasol-anomaly-model.ipynb"
+  echo "  The workbench notebook writes /opt/app-root/src/models/${MODEL_NAME}/model.pkl."
+  echo "  Copy that directory to /mnt/models/${MODEL_NAME} first."
+  echo "  This script also needs the aws CLI on the machine where it runs."
   exit 1
 fi
 

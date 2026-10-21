@@ -6,7 +6,7 @@ ____
 In xref:06-01-potential-imp-ref.adoc[Section 6.1]: _"It would be critical to have multiple instances (Dev/Test/UAT/Prod) of the application."_
 ____
 
-You now have a trained anomaly detection model that understands the {company-name} application's metrics. But it only exists in your development workbench. To be useful in production, we need to **promote** it -- move the model artifact from this cluster to a production cluster where KServe can serve it.
+You now have a trained anomaly detection model that understands the {company-name} application's metrics. It is stored on the workbench at `/opt/app-root/src/models/parasol-anomaly-detector/`. This lab has one cluster, so promotion stays on the current context and uses the MinIO service in `parasol-insurance` as the artifact store.
 
 == The Promotion Workflow
 
@@ -20,59 +20,134 @@ Dev/QA Cluster                  Artifact Store              Production Cluster
 └────────────────┘                                         └────────────────────┘
 ----
 
-Two transport options are available:
-
-* **S3** -- Sync the model directory to a shared S3 bucket (AWS, NooBaa, MinIO)
-* **OCI** -- Package the model as an OCI artifact and push to a container registry (Quay, GHCR)
-
-== Option A: Export via S3
-
-Run the export commands from `~/parasol-insurance`, the checkout from section 7.2.
-
-The `export/export-to-s3.sh` script uploads the model directory:
+Stay on the current kube context:
 
 [source,terminal]
 ----
-./export/export-to-s3.sh parasol-anomaly-detector my-model-bucket us-east-1
+oc whoami --show-server
 ----
 
-If your cluster uses NooBaa (ODF) for S3:
+The server is `https://api.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com:6443`. There is no second production context.
 
-[source,terminal]
-----
-export S3_ENDPOINT_URL="https://s3-openshift-storage.apps.your-cluster.example.com"
-./export/export-to-s3.sh parasol-anomaly-detector model-storage
-----
+== Step 1: Copy the model onto /mnt/models
 
-On the production cluster, import:
+`/opt/app-root/src` and `/mnt/models` are both mounted in `self-healing-workbench`, and they are different volumes. A symlink on the workbench home directory would not be visible to the predictor. Copy the files onto `model-storage-pvc`:
 
 [source,terminal]
 ----
-./export/import-model.sh --from-s3 \
-  --model-name parasol-anomaly-detector \
-  --bucket my-model-bucket \
-  --region us-east-1
+oc exec -n self-healing-platform self-healing-workbench-0 -c self-healing-workbench -- bash -c '
+  set -euo pipefail
+  src=/opt/app-root/src/models/parasol-anomaly-detector
+  dst=/mnt/models/parasol-anomaly-detector
+  test -f "$src/model.pkl"
+  mkdir -p "$dst"
+  cp -a "$src/." "$dst/"
+  ls -la "$dst"
+'
 ----
-
-== Option B: Export via OCI Registry
 
 [source,terminal]
 ----
-./export/export-to-oci.sh parasol-anomaly-detector quay.io/myorg/models latest
+total 1656
+drwxr-sr-x.  2 1001140000 root          4096 Oct 21 16:36 .
+drwxrwsr-x. 10 root       1001140000    4096 Oct 21 19:16 ..
+-rw-r--r--.  1 1001140000 root       1682848 Oct 21 19:06 model.pkl
+-rw-r--r--.  1 1001140000 root           597 Oct 21 19:06 training_metadata.json
 ----
 
-On the production cluster:
+The timestamp and size can differ. `model.pkl` and `training_metadata.json` must both be listed.
+
+The running predictor loads `/mnt/models/anomaly-detector` (`--model_dir=/mnt/models/anomaly-detector`). Copy the same `model.pkl` there so the restart in the last step picks it up:
 
 [source,terminal]
 ----
-./export/import-model.sh --from-oci \
-  --model-name parasol-anomaly-detector \
-  --registry quay.io/myorg/models
+oc exec -n self-healing-platform self-healing-workbench-0 -c self-healing-workbench -- bash -c '
+  set -euo pipefail
+  mkdir -p /mnt/models/anomaly-detector
+  cp -a /mnt/models/parasol-anomaly-detector/model.pkl /mnt/models/anomaly-detector/model.pkl
+  ls -la /mnt/models/anomaly-detector
+'
 ----
+
+== Step 2: Upload to MinIO
+
+Use this object store:
+
+[cols="1,2"]
+|===
+| Setting | Value
+
+| Endpoint
+| `http://minio.parasol-insurance.svc.cluster.local:9000`
+
+| Bucket
+| `model-storage`
+
+| Region
+| `us-east-1`
+
+| Object prefix
+| `parasol-anomaly-detector/`
+|===
+
+The Showroom terminal does not have the `aws` CLI, so `./export/export-to-s3.sh` cannot run there. The workbench has `boto3` and can reach MinIO. Load the MinIO keys from the secret in your terminal, then upload. Leave the key values in the terminal.
+
+[source,terminal]
+----
+export AWS_ACCESS_KEY_ID=$(oc get secret minio-root-user -n parasol-insurance -o jsonpath='{.data.MINIO_ROOT_USER}' | base64 -d)
+export AWS_SECRET_ACCESS_KEY=$(oc get secret minio-root-user -n parasol-insurance -o jsonpath='{.data.MINIO_ROOT_PASSWORD}' | base64 -d)
+----
+
+[source,terminal]
+----
+oc exec -i -n self-healing-platform self-healing-workbench-0 -c self-healing-workbench -- \
+  env AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" python3 - <<'PY'
+import os
+from pathlib import Path
+import boto3
+from botocore.client import Config
+
+src = Path("/mnt/models/parasol-anomaly-detector")
+bucket = "model-storage"
+prefix = "parasol-anomaly-detector"
+s3 = boto3.client(
+    "s3",
+    endpoint_url="http://minio.parasol-insurance.svc.cluster.local:9000",
+    aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+    aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+    region_name="us-east-1",
+    config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+)
+try:
+    s3.create_bucket(Bucket=bucket)
+    print(f"created {bucket}")
+except Exception as exc:
+    code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+    if code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+        print(f"bucket {bucket} already exists")
+    else:
+        raise
+for path in sorted(p for p in src.iterdir() if p.is_file()):
+    key = f"{prefix}/{path.name}"
+    s3.upload_file(str(path), bucket, key)
+    print(f"uploaded s3://{bucket}/{key} ({path.stat().st_size} bytes)")
+PY
+----
+
+The first upload prints:
+
+[source,terminal]
+----
+created model-storage
+uploaded s3://model-storage/parasol-anomaly-detector/model.pkl (1682848 bytes)
+uploaded s3://model-storage/parasol-anomaly-detector/training_metadata.json (597 bytes)
+----
+
+A second run prints `bucket model-storage already exists` and uploads the same two objects again. That is success. The byte counts can differ after another training run.
 
 == Restart the Predictor
 
-After importing, tell KServe to load the new model:
+After the copy and the upload, tell KServe to load the model from `/mnt/models/anomaly-detector`:
 
 [source,terminal]
 ----
