@@ -21,6 +21,15 @@ oc get pods -n parasol-insurance -w
 
 * **Terminal 2** -- Run the chaos scripts (from the parasol-insurance repository root)
 
+Confirm each repair in the remediator log:
+
+[source,terminal]
+----
+oc logs deploy/parasol-remediator -n parasol-insurance --tail=40
+----
+
+A healthy repair prints `firing <AlertName>` and then the action. Pod names in the log will differ from the samples below.
+
 == Scenario 1: Memory Leak (OOMKill)
 
 This simulates what happens when a burst of concurrent claims processing pushes the application's memory toward its limit.
@@ -39,6 +48,33 @@ In Terminal 2, run:
 . `parasol-remediator` deletes the `ic-app` pod.
 . The Deployment starts a replacement. In Terminal 1 you should see the pod go from `Running` to `Terminating`, then a new pod become `Running`.
 
+The script prints its own banner, then holds memory. If the remediator deletes the pod first, the `oc exec` inside the script ends early. That is the repair, not a failed script.
+
+[source,terminal]
+----
+=== Parasol Insurance: Memory Leak Injection ===
+Namespace:  parasol-insurance
+Container:  insurance-claim-app
+Memory:     3686M
+Duration:   100s
+
+Target pod: ic-app-6f9fdc6c8c-ghxq8
+
+>>> Injecting memory pressure (3686M for 100s)...
+    Watch for ParasolOOMRisk. The parasol-remediator deletes the pod.
+----
+
+`Memory` is 90% of the container limit (`4Gi` on this cluster). The target pod name will differ.
+
+The remediator log for this fault:
+
+[source,terminal]
+----
+firing ParasolOOMRisk
+>>> deleting ic-app pod for ParasolOOMRisk
+pod "ic-app-6f9fdc6c8c-l29sg" deleted from parasol-insurance namespace
+----
+
 == Scenario 2: CPU Spike
 
 In Terminal 2, run:
@@ -49,6 +85,29 @@ In Terminal 2, run:
 ----
 
 This runs a 120 second busy-loop. The container CPU limit is 2, so the extra workers are throttled. `ParasolCPUThrottling` fires when more than 25% of CPU periods are throttled, and `parasol-remediator` deletes the pod.
+
+[source,terminal]
+----
+=== Parasol Insurance: CPU Spike Injection ===
+Namespace:  parasol-insurance
+Container:  insurance-claim-app
+CPU cores:  4
+Duration:   120s
+
+Target pod: ic-app-6f9fdc6c8c-ghxq8
+
+>>> Injecting CPU spike (4 workers for 120s)...
+    Watch for ParasolCPUThrottling. The parasol-remediator deletes the pod.
+----
+
+The target pod name will differ. The `oc exec` can end early when the remediator deletes the pod.
+
+[source,terminal]
+----
+firing ParasolCPUThrottling
+>>> deleting ic-app pod for ParasolCPUThrottling
+pod "ic-app-6f9fdc6c8c-d82rk" deleted from parasol-insurance namespace
+----
 
 == Scenario 3: Crash Loop
 
@@ -61,11 +120,55 @@ In Terminal 2, run:
 
 This patches the deployment with an invalid command. The new pod exits immediately. After more than 3 restarts in 10 minutes, `ParasolCrashLooping` fires and `parasol-remediator` rolls the deployment back to the previous revision.
 
+The script output:
+
+[source,terminal]
+----
+=== Parasol Insurance: Crash Loop Injection ===
+Namespace: parasol-insurance
+
+>>> Saving current deployment revision for rollback...
+    Current revision: 8
+
+>>> Patching deployment with invalid command to trigger CrashLoopBackOff...
+deployment.apps/ic-app patched
+
+>>> Crash loop injection applied.
+----
+
+The revision number will differ. Terminal 1 then shows a new pod in `Error` or `CrashLoopBackOff`. After the alert fires, the remediator rolls the deployment back:
+
+[source,terminal]
+----
+firing ParasolCrashLooping
+>>> rolling back ic-app to the previous revision
+deployment.apps/ic-app rolled back
+----
+
+The restart count is a 10 minute window, so the alert can stay firing after the command is already fixed. The next log lines then look like this, and they are success:
+
+[source,terminal]
+----
+firing ParasolCrashLooping
+>>> ParasolCrashLooping is firing but ic-app command is already clean
+----
+
 To roll back yourself if the pod is still crash-looping:
 
 [source,terminal]
 ----
 ./chaos/crash-loop.sh --rollback
+----
+
+[source,terminal]
+----
+=== Parasol Insurance: Crash Loop Injection ===
+Namespace: parasol-insurance
+
+>>> Rolling back deployment to undo crash loop injection...
+deployment.apps/ic-app rolled back
+>>> Rollback triggered. Watch pods recover:
+    oc get pods -n parasol-insurance -w
 ----
 
 == Scenario 4: Network Partition (Database Unreachable)
@@ -77,7 +180,33 @@ In Terminal 2, apply the chaos NetworkPolicy:
 oc apply -f chaos/network-partition.yaml
 ----
 
+[source,terminal]
+----
+networkpolicy.networking.k8s.io/chaos-block-db-access created
+----
+
 This creates NetworkPolicy `chaos-block-db-access`, which blocks `ic-app` egress except DNS and the platform inference port. `ParasolDBConnectionFailure` fires while that policy exists, and `parasol-remediator` deletes it.
+
+[source,terminal]
+----
+firing ParasolDBConnectionFailure
+>>> deleting chaos-block-db-access
+networkpolicy.networking.k8s.io "chaos-block-db-access" deleted from parasol-insurance namespace
+----
+
+The object is gone as soon as that delete succeeds:
+
+[source,terminal]
+----
+oc get networkpolicy chaos-block-db-access -n parasol-insurance
+----
+
+[source,terminal]
+----
+Error from server (NotFound): networkpolicies.networking.k8s.io "chaos-block-db-access" not found
+----
+
+The console can still show the alert as **Firing** for a minute or two. `kube-state-metrics` drops the series after the object is gone, and only then does the rule return to **Inactive**.
 
 == Scenario 5: Disk Pressure
 
@@ -89,6 +218,23 @@ In Terminal 2, run:
 ----
 
 This writes a file on the PostgreSQL volume until usage is just over 70% and stops before 90%. `ParasolDiskPressure` fires, and `parasol-remediator` deletes `/var/lib/pgsql/data/chaos-fill`.
+
+The script prints the `claimdb` pod name, the `df` output before and after the write, and this trailer:
+
+[source,terminal]
+----
+>>> Disk pressure injection complete.
+
+Expected self-healing response:
+  1. ParasolDiskPressure fires when the claimdb volume stays above 70% for 30s
+  2. parasol-remediator deletes /var/lib/pgsql/data/chaos-fill
+----
+
+[source,terminal]
+----
+firing ParasolDiskPressure
+>>> removing chaos-fill from claimdb
+----
 
 To remove the file yourself:
 

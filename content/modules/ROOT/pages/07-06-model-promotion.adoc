@@ -79,6 +79,11 @@ oc rollout restart deployment \
   -n self-healing-platform
 ----
 
+[source,terminal]
+----
+deployment.apps/anomaly-detector-predictor restarted
+----
+
 Verify:
 
 [source,terminal]
@@ -86,7 +91,13 @@ Verify:
 oc get inferenceservice anomaly-detector -n self-healing-platform
 ----
 
-The `READY` column should show `True`.
+[source,terminal]
+----
+NAME               URL                                                                         READY   PREV   LATEST   PREVROLLEDOUTREVISION   LATESTREADYREVISION   AGE
+anomaly-detector   http://anomaly-detector-predictor.self-healing-platform.svc.cluster.local   True                                                                  22h
+----
+
+`AGE` will not match. `READY` should be `True`. Empty `PREV` and `LATEST` columns are normal for this InferenceService.
 
 == What You Accomplished
 

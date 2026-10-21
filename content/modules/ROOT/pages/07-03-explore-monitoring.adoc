@@ -15,17 +15,17 @@ Now that the integration overlay is deployed, Prometheus is already scraping the
 oc get servicemonitor,prometheusrule -n parasol-insurance
 ----
 
-Expected output:
-
 [source,terminal]
 ----
-NAME                                          AGE
-servicemonitor.monitoring.coreos.com/parasol-insurance   2m
-servicemonitor.monitoring.coreos.com/qwen-metrics        2m
+NAME                                                     AGE
+servicemonitor.monitoring.coreos.com/parasol-insurance   6h1m
+servicemonitor.monitoring.coreos.com/qwen-metrics        127m
 
-NAME                                                    AGE
-prometheusrule.monitoring.coreos.com/parasol-insurance-alerts   2m
+NAME                                                            AGE
+prometheusrule.monitoring.coreos.com/parasol-insurance-alerts   6h1m
 ----
+
+`AGE` will not match. Both ServiceMonitors and the `parasol-insurance-alerts` rule should be present.
 
 == Step 2: View Metrics in the {ocp} Console
 
@@ -40,7 +40,38 @@ container_memory_working_set_bytes{namespace="parasol-insurance", container!=""}
 +
 . Click **Run Queries**
 
-You should see the memory usage for the `ic-app` and `claimdb` containers. Under normal load, `ic-app` uses approximately 150-200 MB.
+The graph has one line per container. Ignore lines whose container is `POD` (they sit near zero). On an idle lab cluster the working set looked like this:
+
+[cols="2,2,1"]
+|===
+| Pod | Container | Working set
+
+| `claimdb-...`
+| `postgresql`
+| about 40 MiB
+
+| `ic-app-...`
+| `insurance-claim-app`
+| about 900 MiB
+
+| `milvus-...`
+| `milvus`
+| about 160 MiB
+
+| `minio-...`
+| `minio`
+| about 110 MiB
+
+| `parasol-remediator-...`
+| `remediator`
+| about 5 MiB
+
+| `qwen-predictor-...`
+| `kserve-container`
+| about 3.9 GiB
+|===
+
+The claims container is `insurance-claim-app`, about 900 MiB while idle on this stack. `kserve-container` is large because the Qwen model is loaded. Exact numbers move with load.
 
 Try another query to see CPU usage:
 
@@ -49,24 +80,50 @@ Try another query to see CPU usage:
 rate(container_cpu_usage_seconds_total{namespace="parasol-insurance", container!=""}[5m])
 ----
 
+At idle, `insurance-claim-app` is a small fraction of one core (about 0.002). The other containers are in the same range, except short bursts from `milvus`.
+
 == Step 3: Check Alert Rules
 
 . In the {ocp} Console, navigate to **Observe** > **Alerting** > **Alerting rules**
 . Search for `Parasol`
 
-You should see five rules:
+You should see seven rules. The same list from the CLI:
+
+[source,terminal]
+----
+oc get prometheusrule parasol-insurance-alerts -n parasol-insurance -o jsonpath='{range .spec.groups[0].rules[*]}{.alert}{"\t"}{.labels.severity}{"\n"}{end}'
+----
+
+[source,terminal]
+----
+ParasolHighErrorRate	warning
+ParasolHighLatency	warning
+ParasolOOMRisk	critical
+ParasolCrashLooping	critical
+ParasolDBConnectionFailure	critical
+ParasolCPUThrottling	warning
+ParasolDiskPressure	critical
+----
 
 [cols="2,1,3"]
 |===
 | Alert | Severity | Condition
 
+| `ParasolHighErrorRate`
+| Warning
+| HTTP 5xx rate above 5% for 2 minutes
+
+| `ParasolHighLatency`
+| Warning
+| p95 latency above 2 seconds for 5 minutes
+
 | `ParasolOOMRisk`
 | Critical
-| Memory usage > 85% of limit for 30 seconds
+| `insurance-claim-app` memory above 85% of its limit for 30 seconds
 
 | `ParasolCrashLooping`
 | Critical
-| Pod restarted > 3 times in 10 minutes
+| A pod restarted more than 3 times in 10 minutes
 
 | `ParasolCPUThrottling`
 | Warning
@@ -78,10 +135,10 @@ You should see five rules:
 
 | `ParasolDiskPressure`
 | Critical
-| `claimdb` volume usage > 70% for 30 seconds
+| `claimdb` volume usage above 70% for 30 seconds
 |===
 
-All alerts should currently show as **Inactive** (green). `parasol-remediator` in this namespace watches them and repairs the matching fault. We will change that in the next section!
+With no fault injected, every rule is **Inactive** (green) in the console. `parasol-remediator` repairs the five fault alerts (`ParasolOOMRisk`, `ParasolCPUThrottling`, `ParasolCrashLooping`, `ParasolDBConnectionFailure`, `ParasolDiskPressure`). It does not act on `ParasolHighErrorRate` or `ParasolHighLatency`. The next section fires the five fault alerts.
 
 == Step 4: Query Metrics from a Notebook (Optional)
 

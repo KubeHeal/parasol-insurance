@@ -45,16 +45,22 @@ In a terminal, run:
 oc apply -k bootstrap/kubeheal/
 ----
 
-You should see output similar to the following. If these objects already exist, `oc apply` prints `configured` or `unchanged` instead of `created`. That is still success.
+You should see one line per object. A first apply prints `created`. A second apply prints `unchanged`, or `configured` when the live object differed from the file. All three words are success.
 
 [source,terminal]
 ----
-configmap/kubeheal-kserve-config created
-networkpolicy/allow-parasol-to-platform created
-servicemonitor/parasol-insurance created
-prometheusrule/parasol-insurance-alerts created
-clusterrole/kubeheal-parasol-insurance-access created
-rolebinding/kubeheal-coordination-engine created
+serviceaccount/parasol-remediator unchanged
+role.rbac.authorization.k8s.io/parasol-remediator unchanged
+clusterrole.rbac.authorization.k8s.io/kubeheal-parasol-insurance-access unchanged
+rolebinding.rbac.authorization.k8s.io/kubeheal-coordination-engine unchanged
+rolebinding.rbac.authorization.k8s.io/parasol-remediator unchanged
+clusterrolebinding.rbac.authorization.k8s.io/parasol-remediator-monitoring-view unchanged
+configmap/kubeheal-kserve-config unchanged
+configmap/parasol-remediator-script unchanged
+deployment.apps/parasol-remediator unchanged
+prometheusrule.monitoring.coreos.com/parasol-insurance-alerts unchanged
+servicemonitor.monitoring.coreos.com/parasol-insurance unchanged
+networkpolicy.networking.k8s.io/allow-parasol-to-platform configured
 ----
 
 == Step 2: Verify RBAC
@@ -68,7 +74,10 @@ oc auth can-i get pods \
   -n parasol-insurance
 ----
 
-Expected output: `yes`
+[source,terminal]
+----
+yes
+----
 
 Try a write operation too:
 
@@ -79,7 +88,12 @@ oc auth can-i delete pods \
   -n parasol-insurance
 ----
 
-Expected output: `yes` (the coordination engine needs this to restart unhealthy pods)
+[source,terminal]
+----
+yes
+----
+
+The coordination engine needs that permission to restart unhealthy pods.
 
 == Step 3: Verify NetworkPolicy
 
@@ -88,14 +102,56 @@ Expected output: `yes` (the coordination engine needs this to restart unhealthy 
 oc get networkpolicy -n parasol-insurance
 ----
 
-You should see `allow-parasol-to-platform` in the list. Inspect it:
+[source,terminal]
+----
+NAME                        POD-SELECTOR   AGE
+allow-parasol-to-platform   app=ic-app     6h1m
+----
+
+`AGE` will not match. Inspect the policy:
 
 [source,terminal]
 ----
 oc describe networkpolicy allow-parasol-to-platform -n parasol-insurance
 ----
 
-This policy allows egress from `ic-app` pods to the `self-healing-platform` namespace on port 8080 (KServe inference) and to PostgreSQL on port 5432.
+[source,terminal]
+----
+Name:         allow-parasol-to-platform
+Namespace:    parasol-insurance
+Labels:       app=parasol-insurance
+              app.kubernetes.io/part-of=kubeheal-demo
+Spec:
+  PodSelector:     app=ic-app
+  Not affecting ingress traffic
+  Allowing egress traffic:
+    To Port: 5353/UDP
+    To Port: 5353/TCP
+    To Port: 53/UDP
+    To Port: 53/TCP
+    To:
+      NamespaceSelector: kubernetes.io/metadata.name=openshift-dns
+    ----------
+    To Port: <any> (traffic allowed to all ports)
+    To:
+      PodSelector: <none>
+    ----------
+    To Port: 8080/TCP
+    To Port: 80/TCP
+    To:
+      NamespaceSelector: kubernetes.io/metadata.name=self-healing-platform
+    ----------
+    To Port: 443/TCP
+    To: <any> (traffic not restricted by destination)
+  Policy Types: Egress
+----
+
+Read that as four egress paths from `ic-app`:
+
+* DNS (ports 53 and 5353) to the `openshift-dns` namespace
+* Every port to pods in `parasol-insurance`. That is how `claimdb` on port 5432 stays reachable. There is no separate 5432 rule.
+* Ports 8080 and 80 to the `self-healing-platform` namespace (KServe inference)
+* Port 443 to any destination
 
 == Step 4: Verify ConfigMap
 
@@ -104,7 +160,19 @@ This policy allows egress from `ic-app` pods to the `self-healing-platform` name
 oc get cm kubeheal-kserve-config -n parasol-insurance -o yaml
 ----
 
-The `INFERENCE_SERVER_URL` should point to `http://anomaly-detector-stable.self-healing-platform.svc.cluster.local:8080/v1`.
+The object metadata is long. The `data` section should match this:
+
+[source,terminal]
+----
+INFERENCE_SERVER_URL: http://anomaly-detector-stable.self-healing-platform.svc.cluster.local:8080/v1
+MAX_TOKENS: 512
+MODEL_NAME: anomaly-detector
+PRESENCE_PENALTY: 1.03
+TEMPERATURE: 0.01
+TOP_P: 0.95
+----
+
+`INFERENCE_SERVER_URL` points at `anomaly-detector-stable` in `self-healing-platform`.
 
 == Step 5: Confirm Application Health
 
@@ -115,6 +183,18 @@ Make sure the {company-name} application is still running normally:
 oc get pods -n parasol-insurance
 ----
 
-You should see `ic-app` and `claimdb` pods in `Running` state. The integration overlay does not restart or modify the existing pods.
+[source,terminal]
+----
+NAME                                READY   STATUS      RESTARTS   AGE
+claimdb-c8c74c7cf-p49vx             1/1     Running     0          5h27m
+db-init-job-fffj6                   0/1     Completed   0          137m
+ic-app-6f9fdc6c8c-ghxq8             1/1     Running     0          54m
+milvus-64fc58c765-25flw             1/1     Running     0          127m
+minio-647cddb56c-vpqxb              1/1     Running     0          5h27m
+parasol-remediator-b799f858-gn4jl   1/1     Running     0          85m
+qwen-predictor-6f774d56b4-6ktdw     3/3     Running     0          126m
+----
+
+Pod names and ages will differ. `ic-app`, `claimdb`, and `parasol-remediator` should be `Running`. `db-init-job` is `Completed`. `milvus`, `minio`, and `qwen-predictor` are the rest of this stack. The overlay does not restart the application pods that were already running.
 
 You're now wired in. In the next section we'll explore what the monitoring sees.

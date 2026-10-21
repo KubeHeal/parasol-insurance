@@ -73,10 +73,19 @@ There is no per-student workbench. After the notebook finishes, confirm the file
 oc exec -n self-healing-platform self-healing-workbench-0 -c self-healing-workbench -- ls -la /opt/app-root/src/models/parasol-anomaly-detector/
 ----
 
-You should see:
+[source,terminal]
+----
+total 1648
+drwxr-xr-x. 2 1001140000 root      53 Oct 21 16:36 .
+drwxr-xr-x. 3 1001140000 root      38 Oct 21 16:36 ..
+-rw-r--r--. 1 1001140000 root 1682848 Oct 21 16:36 model.pkl
+-rw-r--r--. 1 1001140000 root     597 Oct 21 16:36 training_metadata.json
+----
 
-* `model.pkl` -- The trained sklearn Pipeline (~1.9 MB)
-* `training_metadata.json` -- Training parameters and feature list
+The owner, timestamp, and exact byte count will differ. You should see:
+
+* `model.pkl` -- the trained sklearn Pipeline, about 1.6 MB
+* `training_metadata.json` -- training parameters and feature list
 
 == What We Built
 
