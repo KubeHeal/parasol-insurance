@@ -10,8 +10,29 @@ set -euo pipefail
 
 NAMESPACE="${1:-parasol-insurance}"
 CONTAINER="insurance-claim-app"
-STRESS_BYTES="200M"
 TIMEOUT="60s"
+
+# Stress ~90% of the container memory limit so ParasolOOMRisk (>85%) can fire.
+# A fixed 200M stays under the 1Gi limit used by bootstrap/rosa/.
+LIMIT_RAW=$(oc get deploy/ic-app -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="insurance-claim-app")].resources.limits.memory}' 2>/dev/null || true)
+STRESS_BYTES="200M"
+if [ -n "${LIMIT_RAW}" ]; then
+    NUM=$(echo "${LIMIT_RAW}" | sed -E 's/[^0-9].*//')
+    UNIT=$(echo "${LIMIT_RAW}" | sed -E 's/[0-9]+//')
+    case "${UNIT}" in
+        Gi) MIB=$((NUM * 1024)) ;;
+        Mi) MIB=${NUM} ;;
+        Ki) MIB=$((NUM / 1024)) ;;
+        *) MIB=0 ;;
+    esac
+    if [ "${MIB}" -gt 0 ]; then
+        STRESS_MIB=$((MIB * 90 / 100))
+        if [ "${STRESS_MIB}" -lt 32 ]; then
+            STRESS_MIB=32
+        fi
+        STRESS_BYTES="${STRESS_MIB}M"
+    fi
+fi
 
 echo "=== Parasol Insurance: Memory Leak Injection ==="
 echo "Namespace:  ${NAMESPACE}"

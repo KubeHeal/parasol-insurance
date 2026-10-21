@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-root-user
+  labels:
+    app: minio
+stringData:
+  MINIO_ROOT_USER: minio
+  MINIO_ROOT_PASSWORD: minio-parasol
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-minio
+  labels:
+    app: minio
+stringData:
+  aws_access_key_id: minio
+  aws_secret_access_key: minio-parasol
+type: Opaque
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: minio
+---
+# MinIO image runs as a fixed uid that restricted SCC rejects.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: minio-anyuid
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+  - kind: ServiceAccount
+    name: minio
+    namespace: parasol-insurance
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9090
+      targetPort: 9090
+  selector:
+    app: minio
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      serviceAccountName: minio
+      containers:
+        - name: minio
+          image: quay.io/rh-aiservices-bu/minio:RELEASE.2025-09-07T16-13-09Z
+          command:
+            - /bin/bash
+            - -c
+            - minio server /data --console-address :9090
+          envFrom:
+            - secretRef:
+                name: minio-root-user
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio

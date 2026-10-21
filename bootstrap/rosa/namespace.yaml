@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: parasol-insurance
+  labels:
+    app.kubernetes.io/part-of: kubeheal-demo
+    # So the cluster Prometheus can discover the ServiceMonitor in this namespace
+    openshift.io/cluster-monitoring: "true"
+  annotations:
+    openshift.io/display-name: Parasol Insurance (ROSA + KubeHeal)

@@ -20,13 +20,24 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # Allow DNS resolution
-    - to: []
+    # OpenShift DNS lives in openshift-dns and answers on 5353.
+    # A port-only rule does not reach it on OVN-Kubernetes.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
       ports:
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
+    # Postgres and MinIO run in this namespace (ROSA overlay).
+    - to:
+        - podSelector: {}
     # Allow traffic to KServe InferenceService in the platform namespace
     - to:
         - namespaceSelector:
@@ -35,8 +46,10 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
-    # Allow traffic to the PostgreSQL database in any namespace
+        - protocol: TCP
+          port: 80
+    # Model weights and container helper calls (HTTPS)
     - to: []
       ports:
         - protocol: TCP
-          port: 5432
+          port: 443

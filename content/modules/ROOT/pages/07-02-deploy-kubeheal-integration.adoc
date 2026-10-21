@@ -27,6 +27,15 @@ The KubeHeal integration overlay adds four resource groups to the `parasol-insur
 | Allows the {company-name} app to reach the platform's KServe InferenceService for LLM inference across namespaces
 |===
 
+On a ROSA cluster that already runs the self-healing platform, deploy the application into this same namespace first:
+
+[source,terminal]
+----
+oc apply -k bootstrap/rosa/
+----
+
+That creates Postgres, MinIO, and `ic-app` in `parasol-insurance`. `bootstrap/ic-shared-app/base/` targets `ic-shared-app` and waits for workshop namespaces this cluster does not have.
+
 == Step 1: Apply the Integration Overlay
 
 In a terminal, run:

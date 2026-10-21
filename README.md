@@ -4,26 +4,34 @@
 > adds cross-namespace self-healing integration with the
 > [OpenShift AI Ops Self-Healing Platform](https://github.com/KubeHeal/openshift-aiops-platform).
 >
-> **Quick Start:**
+> **Quick Start (ROSA cluster that already runs the self-healing platform):**
 >
 > ```bash
-> # 1. Deploy Parasol Insurance
-> oc apply -k bootstrap/ic-shared-app/base/
->
-> # 2. Deploy KubeHeal integration (RBAC, monitoring, KServe wiring)
+> # App, Postgres, and MinIO land in parasol-insurance.
+> # Do not use bootstrap/ic-shared-app/base/ on this cluster: that path
+> # targets ic-shared-app and waits for workshop stacks (ic-shared-db,
+> # ic-shared-llm, redhat-ods-operator) that a platform install does not create.
+> oc apply -k bootstrap/rosa/
 > oc apply -k bootstrap/kubeheal/
 >
-> # 3. Inject a fault and watch self-healing
+> oc get pods,route -n parasol-insurance
 > ./chaos/memory-leak.sh
 > ```
 >
-> **Full Tutorial:** [Cross-Namespace Self-Healing Demo](https://github.com/KubeHeal/openshift-aiops-platform/blob/main/docs/tutorials/cross-namespace-self-healing-demo.md)
+> The claim app is pointed at `anomaly-detector-stable` in `self-healing-platform`.
+> That endpoint is for anomaly scores, not Granite chat. Pods still start so the
+> chaos scripts and coordination-engine RBAC can be exercised. A full Parasol
+> workshop (Milvus + Granite on a GPU) remains the ApplicationSet under
+> `bootstrap/applicationset/`.
+>
+> **Chaos notes:** [chaos/README.md](chaos/README.md)
 >
 > **What's added on this branch:**
 >
 > | Directory | Purpose |
 > |-----------|---------|
-> | `bootstrap/kubeheal/` | Kustomize overlay: RBAC, ServiceMonitor, PrometheusRule, KServe wiring |
+> | `bootstrap/rosa/` | ROSA + existing platform: app, Postgres, MinIO, and KubeHeal overlay in `parasol-insurance` |
+| `bootstrap/kubeheal/` | Kustomize overlay: RBAC, ServiceMonitor, PrometheusRule, KServe wiring |
 > | `chaos/` | 5 fault injection scripts (memory-leak, cpu-spike, crash-loop, disk-pressure, network-partition) |
 > | `training/` | Jupyter notebook + Tekton pipeline for Parasol-specific anomaly model |
 > | `models/` | Pre-trained baseline Isolation Forest model |

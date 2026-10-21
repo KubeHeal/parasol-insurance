@@ -7,8 +7,8 @@ in a namespace it does not own.
 ## Prerequisites
 
 - `oc` CLI logged into the cluster
-- Parasol Insurance deployed in the `parasol-insurance` namespace
 - KubeHeal platform deployed in `self-healing-platform` namespace
+- Parasol demo deployed in `parasol-insurance`: `oc apply -k bootstrap/rosa/`
 - KubeHeal bootstrap applied: `oc apply -k bootstrap/kubeheal/`
 
 ## Scenarios
