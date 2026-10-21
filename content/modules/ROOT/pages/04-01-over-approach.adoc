@@ -1,6 +1,8 @@
 = Overall Approach
 include::_attributes.adoc[]
 
+NOTE: This ROSA cluster does not include ModelMesh. Sections 4.2 through 4.5 cannot be executed here.
+
 As part of this prototype, we investigated the use of the YOLOv8 model.
 This model can be found online at https://www.yolov8.com[yolov8,window=_blank] and downloaded.
 

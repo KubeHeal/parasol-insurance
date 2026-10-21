@@ -9,3 +9,7 @@ resources:
   - monitoring/prometheusrule.yaml
   - rbac/clusterrole.yaml
   - rbac/rolebinding.yaml
+  - remediator/serviceaccount.yaml
+  - remediator/rbac.yaml
+  - remediator/script-configmap.yaml
+  - remediator/deployment.yaml

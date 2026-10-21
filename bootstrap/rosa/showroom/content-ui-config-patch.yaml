@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: showroom
+  namespace: showroom
+spec:
+  template:
+    spec:
+      containers:
+        - name: content
+          volumeMounts:
+            - name: ui-config
+              mountPath: /showroom/repo/ui-config.yml
+              subPath: ui-config.yml
+      volumes:
+        - name: ui-config
+          configMap:
+            name: showroom-ui-config

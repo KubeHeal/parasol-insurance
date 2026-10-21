@@ -97,7 +97,7 @@ data:
     bastion_password: from_helm
     user: cluster-admin
     guid: rosa
-    password: "Run rosa describe admin -c aiops-platform-lab for the login command. The password was printed once by rosa create admin and cannot be retrieved. If it was not saved, rosa delete admin and rosa create admin print a new one."
+    password: "Run rosa login --use-device-code first. rosa describe admin -c aiops-platform-lab only works after that login, and it shows the login command and username, not the password. The password was printed once by rosa create admin and cannot be retrieved. If it was not saved, rosa delete admin and rosa create admin print a new one."
     openshift_cluster_ingress_domain: apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com
     openshift_console_url: https://console-openshift-console.apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com
     rhoai_dashboard_url: https://rhods-dashboard-redhat-ods-applications.apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com

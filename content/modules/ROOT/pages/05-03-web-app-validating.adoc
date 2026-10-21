@@ -1,6 +1,8 @@
 = Validating the application
 include::_attributes.adoc[]
 
+Open `https://ic-app-parasol-insurance.{openshift_cluster_ingress_domain}`. That route is the claim application in the `parasol-insurance` namespace.
+
 == Original App
 
 What you see when you first connect to the application is the new version.

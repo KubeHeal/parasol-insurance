@@ -1,6 +1,23 @@
 = Deploying the application via GitOps
 include::_attributes.adoc[]
 
+== Application already deployed
+
+On this ROSA cluster the claim application is already running in `parasol-insurance`. There is no Gitea server and no per-user Argo CD project, so do not create an Application in a `{user}` namespace.
+
+Confirm the route:
+
+[source,terminal]
+----
+oc get route ic-app -n parasol-insurance
+----
+
+Open `https://ic-app-parasol-insurance.{openshift_cluster_ingress_domain}` in a browser.
+
+== GitOps steps (not used on this cluster)
+
+The steps below deploy into a per-user namespace on the shared workshop cluster. Skip them here.
+
 == Deploy the application(s) via GitOps
 
 We are going to use OpenShift GitOps/{argocd} to deploy the application in your namespace.

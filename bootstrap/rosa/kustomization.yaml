@@ -4,13 +4,8 @@ kind: Kustomization
 # Self-contained Parasol demo for a ROSA cluster that already runs the
 # OpenShift AI Ops platform in the self-healing-platform namespace.
 # Apply kubeheal separately; oc apply -k cannot load files outside this directory.
-
-namespace: parasol-insurance
+# stack and showroom set their own namespaces.
 
 resources:
-  - namespace.yaml
-  - postgres.yaml
-  - minio.yaml
-  - app.yaml
-  - service.yaml
-  - route.yaml
+  - stack
+  - showroom

@@ -16,7 +16,7 @@ The model is packaged as an **sklearn Pipeline** (StandardScaler + IsolationFore
 
 == Step 1: Open the Training Notebook
 
-In your workbench, navigate to:
+In the platform workbench (`self-healing-workbench` in `self-healing-platform`), open:
 
 [source,text]
 ----
@@ -52,25 +52,25 @@ Classification Report (synthetic ground truth):
 =======================================================
               precision    recall  f1-score   support
 
-      Normal       0.97      0.92      0.94      4500
-     Anomaly       0.62      0.83      0.71       500
+      Normal       1.00      1.00      1.00      4500
+     Anomaly       0.98      0.98      0.98       500
 
-    accuracy                           0.91      5000
+    accuracy                           1.00      5000
 
 Confusion Matrix:
-  TN=4140  FP=360
-  FN=85    TP=415
+  TN=4491  FP=9
+  FN=9    TP=491
 ----
 
 The model correctly identifies most anomalies while keeping false positives manageable.
 
 == Step 4: Verify the Saved Model
 
-In a terminal, confirm the model file was created:
+There is no per-student workbench. After the notebook finishes, confirm the files from the platform workbench:
 
 [source,terminal]
 ----
-ls -la /opt/app-root/src/models/parasol-anomaly-detector/
+oc exec -n self-healing-platform self-healing-workbench-0 -c self-healing-workbench -- ls -la /opt/app-root/src/models/parasol-anomaly-detector/
 ----
 
 You should see:

@@ -1,6 +1,8 @@
 = Model Serving
 include::_attributes.adoc[]
 
+NOTE: ModelMesh is not deployed on this ROSA cluster, and there is no per-user project in which to serve a model. Skip the serving steps on this page. MinIO for this cluster is `{minio-endpoint}`.
+
 . At this point, we need to deploy the model into {rhoai-short} model serving.
 . We will create another Data Connection...
 .. With almost identical information

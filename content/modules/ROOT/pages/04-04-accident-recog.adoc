@@ -1,6 +1,8 @@
 = Accident Recognition
 include::_attributes.adoc[]
 
+NOTE: ModelMesh is not deployed on this ROSA cluster. The accident-recognition exercise on this page cannot be executed here.
+
 == Introduction
 
 Now that we have retrained our model we can test it against some sample images.

@@ -1,0 +1,16 @@
+---
+type: showroom
+default_width: 30
+persist_url_state: true
+
+view_switcher:
+  enabled: true
+  default_mode: split
+
+tabs:
+  - name: ">_ terminal"
+    url: /terminal
+  - name: Wetty
+    url: /wetty/
+  - name: OCP Console
+    url: https://console-openshift-console.apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com

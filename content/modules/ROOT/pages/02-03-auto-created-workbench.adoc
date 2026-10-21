@@ -1,6 +1,8 @@
 = Pre-Created workbench
 include::_attributes.adoc[]
 
+NOTE: There is no per-student workbench. The running workbench is `self-healing-workbench` in the `self-healing-platform` namespace. Notebooks for this lab are in the `lab-materials/` directory of the parasol-insurance repository.
+
 Please head to the Workbenches tab.
 
 One of the components that was pre-created for you is the workbench.

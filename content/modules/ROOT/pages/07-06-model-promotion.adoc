@@ -75,7 +75,7 @@ After importing, tell KServe to load the new model:
 [source,terminal]
 ----
 oc rollout restart deployment \
-  -l serving.kserve.io/inferenceservice=parasol-anomaly-detector \
+  -l serving.kserve.io/inferenceservice=anomaly-detector \
   -n self-healing-platform
 ----
 
@@ -83,7 +83,7 @@ Verify:
 
 [source,terminal]
 ----
-oc get inferenceservice parasol-anomaly-detector -n self-healing-platform
+oc get inferenceservice anomaly-detector -n self-healing-platform
 ----
 
 The `READY` column should show `True`.

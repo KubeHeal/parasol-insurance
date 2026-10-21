@@ -15,11 +15,11 @@ in a namespace it does not own.
 
 | Script | Fault | Detection | Expected Remediation |
 |--------|-------|-----------|---------------------|
-| `memory-leak.sh` | OOMKill via `stress` | `ParasolOOMRisk` alert, anomaly score spike | Coordination engine restarts pod, optionally patches memory limit |
-| `cpu-spike.sh` | CPU saturation via `stress` | `ParasolCPUThrottling` alert, Isolation Forest anomaly | Coordination engine scales deployment or restarts pod |
-| `crash-loop.sh` | Invalid command patch | `ParasolCrashLooping` alert | Coordination engine rolls back deployment to previous revision |
-| `disk-pressure.sh` | Fill PostgreSQL PVC | Predictive analytics alert on disk trend | Coordination engine cleans up or expands PVC |
-| `network-partition.yaml` | NetworkPolicy blocks DB | `ParasolDBConnectionFailure` alert | Coordination engine removes the faulty NetworkPolicy |
+| `memory-leak.sh` | Hold ~90% of the container memory limit | `ParasolOOMRisk` | `parasol-remediator` deletes the ic-app pod |
+| `cpu-spike.sh` | CPU saturation via a busy loop | `ParasolCPUThrottling` | `parasol-remediator` deletes the ic-app pod |
+| `crash-loop.sh` | Invalid command patch | `ParasolCrashLooping` | `parasol-remediator` rolls the deployment back |
+| `disk-pressure.sh` | Fill the PostgreSQL PVC past 70% | `ParasolDiskPressure` | `parasol-remediator` deletes the fill file |
+| `network-partition.yaml` | NetworkPolicy blocks DB | `ParasolDBConnectionFailure` | `parasol-remediator` removes the NetworkPolicy |
 
 ## Usage
 

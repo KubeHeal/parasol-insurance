@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: parasol-remediator-script
+  namespace: parasol-insurance
+  labels:
+    app: parasol-remediator
+    app.kubernetes.io/part-of: kubeheal-demo
+    app.kubernetes.io/component: remediator
+data:
+  remediate.sh: |
+    #!/bin/bash
+    # Act once per firing Parasol alert. The coordination engine does not
+    # watch these alerts, so this loop is what repairs the chaos scenarios.
+    set -uo pipefail
+
+    NS="${NAMESPACE:-parasol-insurance}"
+    PROM="${PROMETHEUS_URL:-https://thanos-querier.openshift-monitoring.svc:9091}"
+    CA="${PROMETHEUS_CA:-/etc/pki/service-ca/service-ca.crt}"
+    COOLDOWN="${COOLDOWN_SECONDS:-180}"
+    QUERY='ALERTS{alertstate="firing",namespace="parasol-insurance",alertname=~"ParasolOOMRisk|ParasolCPUThrottling|ParasolCrashLooping|ParasolDBConnectionFailure|ParasolDiskPressure"}'
+
+    mkdir -p /tmp/acted
+
+    cooled_down() {
+      local stamp="/tmp/acted/$1"
+      local now last
+      now=$(date +%s)
+      if [ -f "${stamp}" ]; then
+        last=$(cat "${stamp}")
+        if [ $((now - last)) -lt "${COOLDOWN}" ]; then
+          return 1
+        fi
+      fi
+      return 0
+    }
+
+    mark_acted() {
+      date +%s > "/tmp/acted/$1"
+    }
+
+    delete_app_pod() {
+      echo ">>> deleting ic-app pod for $1"
+      oc delete pod -n "${NS}" -l app=ic-app --wait=false
+    }
+
+    rollback_crash() {
+      local cmd
+      cmd=$(oc get deploy/ic-app -n "${NS}" -o jsonpath='{.spec.template.spec.containers[0].command}' 2>/dev/null || true)
+      if echo "${cmd}" | grep -q 'CHAOS'; then
+        echo ">>> rolling back ic-app to the previous revision"
+        oc rollout undo deploy/ic-app -n "${NS}"
+      else
+        echo ">>> ParasolCrashLooping is firing but ic-app command is already clean"
+      fi
+    }
+
+    clear_network() {
+      echo ">>> deleting chaos-block-db-access"
+      oc delete networkpolicy chaos-block-db-access -n "${NS}" --ignore-not-found
+    }
+
+    clear_disk() {
+      echo ">>> removing chaos-fill from claimdb"
+      oc exec -n "${NS}" deploy/claimdb -- rm -f /var/lib/pgsql/data/chaos-fill
+    }
+
+    handle() {
+      case "$1" in
+        ParasolOOMRisk|ParasolCPUThrottling) delete_app_pod "$1" ;;
+        ParasolCrashLooping) rollback_crash ;;
+        ParasolDBConnectionFailure) clear_network ;;
+        ParasolDiskPressure) clear_disk ;;
+      esac
+    }
+
+    echo "parasol-remediator watching ${PROM} every 15s"
+    while true; do
+      TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      BODY=$(curl -sS --cacert "${CA}" -G \
+        --data-urlencode "query=${QUERY}" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${PROM}/api/v1/query" 2>&1 || true)
+      if echo "${BODY}" | grep -q '"status":"success"'; then
+        for alert in ParasolOOMRisk ParasolCPUThrottling ParasolCrashLooping ParasolDBConnectionFailure ParasolDiskPressure; do
+          if echo "${BODY}" | grep -q "\"alertname\":\"${alert}\""; then
+            if cooled_down "${alert}"; then
+              echo "firing ${alert}"
+              if handle "${alert}"; then
+                mark_acted "${alert}"
+              else
+                echo "action for ${alert} failed; will retry"
+              fi
+            fi
+          fi
+        done
+      else
+        echo "prometheus query failed: ${BODY}" | head -c 400
+        echo
+      fi
+      sleep 15
+    done

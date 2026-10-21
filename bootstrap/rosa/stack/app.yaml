@@ -33,9 +33,9 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: INFERENCE_SERVER_URL
-              value: http://anomaly-detector-stable.self-healing-platform.svc.cluster.local:8080/v1
+              value: http://qwen-predictor.parasol-insurance.svc.cluster.local:80/v1
             - name: MODEL_NAME
-              value: anomaly-detector
+              value: qwen2.5
             - name: MAX_TOKENS
               value: "512"
             - name: TOP_P

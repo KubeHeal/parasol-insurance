@@ -15,6 +15,7 @@
 > oc apply -k bootstrap/kubeheal/
 >
 > oc get pods,route -n parasol-insurance
+> oc get route showroom -n showroom
 > ./chaos/memory-leak.sh
 > ```
 >
@@ -30,7 +31,7 @@
 >
 > | Directory | Purpose |
 > |-----------|---------|
-> | `bootstrap/rosa/` | ROSA + existing platform: app, Postgres, MinIO, and KubeHeal overlay in `parasol-insurance` |
+> | `bootstrap/rosa/` | ROSA + existing platform: claim app in `parasol-insurance`, and the lab showroom in `showroom` |
 | `bootstrap/kubeheal/` | Kustomize overlay: RBAC, ServiceMonitor, PrometheusRule, KServe wiring |
 > | `chaos/` | 5 fault injection scripts (memory-leak, cpu-spike, crash-loop, disk-pressure, network-partition) |
 > | `training/` | Jupyter notebook + Tekton pipeline for Parasol-specific anomaly model |

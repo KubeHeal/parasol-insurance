@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: showroom
+  labels:
+    app.kubernetes.io/part-of: parasol-insurance
+  annotations:
+    openshift.io/display-name: Parasol Insurance Showroom

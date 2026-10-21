@@ -1,6 +1,8 @@
 = Confidence-Check Pipeline
 include::_attributes.adoc[]
 
+NOTE: This ROSA cluster has no per-user Data Science project and no pipeline server. The Elyra import below cannot be run here. The model endpoint used by the scripts is Qwen in `parasol-insurance`, and pipeline artifacts would use `minio.parasol-insurance.svc:9000`.
+
 == What will the pipeline do?
 To make sure that everything works as we would expect it to, and that the model has not been tampered with, we will create a confidence-check pipeline that tests the model through its endpoint. +
 We will test the response time, the response quality, and that the model hash has not changed. +

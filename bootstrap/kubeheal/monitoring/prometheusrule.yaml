@@ -56,7 +56,7 @@ spec:
               /
               container_spec_memory_limit_bytes{namespace="parasol-insurance", container="insurance-claim-app"}
             ) > 0.85
-          for: 1m
+          for: 30s
           labels:
             severity: critical
             namespace: parasol-insurance
@@ -78,30 +78,28 @@ spec:
             summary: "Parasol Insurance pod crash looping"
             description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value }} times in the last 10 minutes."
 
-        # Database connection failures
+        # Chaos NetworkPolicy blocking the app from PostgreSQL
         - alert: ParasolDBConnectionFailure
           expr: |
-            up{namespace="parasol-insurance", job="parasol-insurance"} == 0
-            or
-            kube_deployment_status_replicas_available{namespace="parasol-insurance", deployment="claimdb"} == 0
-          for: 1m
+            kube_networkpolicy_spec_egress_rules{namespace="parasol-insurance",networkpolicy="chaos-block-db-access"} > 0
+          for: 30s
           labels:
             severity: critical
             namespace: parasol-insurance
             app: parasol-insurance
           annotations:
-            summary: "Parasol Insurance database unreachable"
-            description: "The PostgreSQL database for Parasol Insurance is not available."
+            summary: "Parasol Insurance database traffic blocked"
+            description: "NetworkPolicy chaos-block-db-access is blocking ic-app egress, including PostgreSQL."
 
         # CPU throttling
         - alert: ParasolCPUThrottling
           expr: |
             (
-              sum(rate(container_cpu_cfs_throttled_seconds_total{namespace="parasol-insurance", container="insurance-claim-app"}[5m]))
+              sum(rate(container_cpu_cfs_throttled_periods_total{namespace="parasol-insurance", container="insurance-claim-app"}[1m]))
               /
-              sum(rate(container_cpu_usage_seconds_total{namespace="parasol-insurance", container="insurance-claim-app"}[5m]))
+              sum(rate(container_cpu_cfs_periods_total{namespace="parasol-insurance", container="insurance-claim-app"}[1m]))
             ) > 0.25
-          for: 5m
+          for: 0s
           labels:
             severity: warning
             namespace: parasol-insurance
@@ -109,3 +107,20 @@ spec:
           annotations:
             summary: "Parasol Insurance container CPU throttled"
             description: "Container {{ $labels.container }} is being CPU-throttled {{ $value | humanizePercentage }} of the time."
+
+        # PostgreSQL volume filling up
+        - alert: ParasolDiskPressure
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes{namespace="parasol-insurance",persistentvolumeclaim="claimdb"}
+              /
+              kubelet_volume_stats_capacity_bytes{namespace="parasol-insurance",persistentvolumeclaim="claimdb"}
+            ) > 0.70
+          for: 30s
+          labels:
+            severity: critical
+            namespace: parasol-insurance
+            app: parasol-insurance
+          annotations:
+            summary: "Parasol Insurance database volume above 70%"
+            description: "The claimdb persistent volume is above 70% full."

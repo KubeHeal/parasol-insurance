@@ -71,4 +71,4 @@ image::05/app-code.png[]
 
 Of course, this is a complete VSCode environment, so you can configure it in the same way as you would do for a local VSCode installation. You can install extensions that will be persisted when you stop and restart the Workbench, you can configure your own keybindings, etc.
 
-The application has already been built as a container image that we are now ready to deploy using GitOps. You can head to the next section.
+The application has already been built as a container image and is running in the `parasol-insurance` namespace. Continue to the next section to confirm the route. You do not deploy it again with GitOps on this cluster.

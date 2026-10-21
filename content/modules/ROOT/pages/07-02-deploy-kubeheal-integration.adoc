@@ -21,7 +21,7 @@ The KubeHeal integration overlay adds four resource groups to the `parasol-insur
 | Tells Prometheus to scrape the {company-name} app's `/metrics` endpoint every 15 seconds
 
 | **PrometheusRule**
-| Defines alert rules: `ParasolOOMRisk`, `ParasolCrashLooping`, `ParasolCPUThrottling`, `ParasolDBConnectionFailure`
+| Defines alert rules: `ParasolOOMRisk`, `ParasolCrashLooping`, `ParasolCPUThrottling`, `ParasolDBConnectionFailure`, `ParasolDiskPressure`
 
 | **NetworkPolicy + ConfigMap**
 | Allows the {company-name} app to reach the platform's KServe InferenceService for LLM inference across namespaces
@@ -45,11 +45,11 @@ In a terminal, run:
 oc apply -k bootstrap/kubeheal/
 ----
 
-You should see output similar to:
+You should see output similar to the following. If these objects already exist, `oc apply` prints `configured` or `unchanged` instead of `created`. That is still success.
 
 [source,terminal]
 ----
-configmap/parasol-kserve-config created
+configmap/kubeheal-kserve-config created
 networkpolicy/allow-parasol-to-platform created
 servicemonitor/parasol-insurance created
 prometheusrule/parasol-insurance-alerts created
@@ -101,7 +101,7 @@ This policy allows egress from `ic-app` pods to the `self-healing-platform` name
 
 [source,terminal]
 ----
-oc get cm parasol-kserve-config -n parasol-insurance -o yaml
+oc get cm kubeheal-kserve-config -n parasol-insurance -o yaml
 ----
 
 The `INFERENCE_SERVER_URL` should point to `http://anomaly-detector-stable.self-healing-platform.svc.cluster.local:8080/v1`.

@@ -2,7 +2,7 @@
 # network-partition.yaml — Block Parasol app from reaching its PostgreSQL database
 #
 # Triggers: ParasolDBConnectionFailure alert
-# Expected: Coordination engine detects connection errors, removes this NetworkPolicy
+# Expected: parasol-remediator deletes this NetworkPolicy when ParasolDBConnectionFailure fires
 #
 # Apply:  oc apply -f chaos/network-partition.yaml -n parasol-insurance
 # Remove: oc delete -f chaos/network-partition.yaml -n parasol-insurance

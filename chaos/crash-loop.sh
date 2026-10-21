@@ -2,15 +2,20 @@
 # crash-loop.sh — Force Parasol Insurance app into CrashLoopBackOff
 #
 # Triggers: ParasolCrashLooping alert
-# Expected: Coordination engine detects crash loop, rolls back deployment
+# Expected: parasol-remediator rolls the deployment back to the previous revision
 #
 # Usage: ./chaos/crash-loop.sh [NAMESPACE]
 #        ./chaos/crash-loop.sh --rollback [NAMESPACE]   # undo the injection
 
 set -euo pipefail
 
-NAMESPACE="${2:-${1:-parasol-insurance}}"
-ACTION="${1:-inject}"
+if [ "${1:-}" = "--rollback" ]; then
+    ACTION="rollback"
+    NAMESPACE="${2:-parasol-insurance}"
+else
+    ACTION="inject"
+    NAMESPACE="${1:-parasol-insurance}"
+fi
 
 echo "=== Parasol Insurance: Crash Loop Injection ==="
 echo "Namespace: ${NAMESPACE}"
@@ -21,8 +26,7 @@ if ! oc get deploy/ic-app -n "${NAMESPACE}" &>/dev/null; then
     exit 1
 fi
 
-if [ "${ACTION}" = "--rollback" ]; then
-    NAMESPACE="${2:-parasol-insurance}"
+if [ "${ACTION}" = "rollback" ]; then
     echo ">>> Rolling back deployment to undo crash loop injection..."
     oc rollout undo deploy/ic-app -n "${NAMESPACE}"
     echo ">>> Rollback triggered. Watch pods recover:"
@@ -50,8 +54,8 @@ echo ""
 echo "Expected self-healing response:"
 echo "  1. Pod restarts rapidly, enters CrashLoopBackOff"
 echo "  2. ParasolCrashLooping alert fires (>3 restarts in 10min)"
-echo "  3. Coordination engine detects crash pattern"
-echo "  4. Coordination engine rolls back to previous known-good revision"
+echo "  3. parasol-remediator detects the firing alert"
+echo "  4. parasol-remediator rolls back to the previous revision"
 echo ""
 echo "Watch: oc get pods -n ${NAMESPACE} -w"
 echo ""

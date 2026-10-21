@@ -1,8 +1,8 @@
 #!/bin/bash
 # memory-leak.sh — Inject memory pressure into the Parasol Insurance app
 #
-# Triggers: ParasolOOMRisk alert, OOMKill detection by coordination engine
-# Expected: Coordination engine detects OOMKill pattern, restarts pod with backoff
+# Triggers: ParasolOOMRisk alert
+# Expected: parasol-remediator deletes the ic-app pod
 #
 # Usage: ./chaos/memory-leak.sh [NAMESPACE]
 
@@ -10,7 +10,7 @@ set -euo pipefail
 
 NAMESPACE="${1:-parasol-insurance}"
 CONTAINER="insurance-claim-app"
-TIMEOUT="60s"
+HOLD_SECONDS="100"
 
 # Stress ~90% of the container memory limit so ParasolOOMRisk (>85%) can fire.
 # A fixed 200M stays under the 1Gi limit used by bootstrap/rosa/.
@@ -38,7 +38,7 @@ echo "=== Parasol Insurance: Memory Leak Injection ==="
 echo "Namespace:  ${NAMESPACE}"
 echo "Container:  ${CONTAINER}"
 echo "Memory:     ${STRESS_BYTES}"
-echo "Duration:   ${TIMEOUT}"
+echo "Duration:   ${HOLD_SECONDS}s"
 echo ""
 
 # Verify the deployment exists
@@ -56,19 +56,50 @@ fi
 
 echo "Target pod: ${POD}"
 echo ""
-echo ">>> Injecting memory pressure (${STRESS_BYTES} for ${TIMEOUT})..."
-echo "    Watch for ParasolOOMRisk alert in Prometheus/AlertManager"
+echo ">>> Injecting memory pressure (${STRESS_BYTES} for ${HOLD_SECONDS}s)..."
+echo "    Watch for ParasolOOMRisk. The parasol-remediator deletes the pod."
 echo ""
 
-# Install stress if not present, then run
+# stress is optional. Without it, allocate anonymous memory in the process
+# (not /dev/shm, which is only 64Mi) and hold it past the 30s alert window.
 oc exec -n "${NAMESPACE}" "${POD}" -c "${CONTAINER}" -- /bin/sh -c "
     if command -v stress >/dev/null 2>&1; then
-        stress --vm 1 --vm-bytes ${STRESS_BYTES} --timeout ${TIMEOUT}
+        stress --vm 1 --vm-bytes ${STRESS_BYTES} --timeout ${HOLD_SECONDS}s
     else
-        echo 'stress not found, using dd-based memory allocation...'
-        dd if=/dev/zero of=/dev/shm/fill bs=1M count=200 2>/dev/null || true
-        sleep ${TIMEOUT%%s}
-        rm -f /dev/shm/fill
+        echo 'stress not found, allocating anonymous memory with python...'
+        python3 -c \"
+import time
+def cgroup():
+    try:
+        cur = int(open('/sys/fs/cgroup/memory.current').read())
+        raw = open('/sys/fs/cgroup/memory.max').read().strip()
+        mx = int(raw) if raw != 'max' else 0
+        inactive = 0
+        for line in open('/sys/fs/cgroup/memory.stat'):
+            k, v = line.split()
+            if k == 'inactive_file':
+                inactive = int(v)
+        return cur, mx, max(cur - inactive, 0)
+    except Exception:
+        return 0, 0, 0
+cur, mx, ws = cgroup()
+step = 16 * 1024 * 1024
+buf = []
+allocated = 0
+target = int(mx * 0.90) if mx else 0
+ceiling = int(mx * 0.98) if mx else 0
+while True:
+    cur, mx, ws = cgroup()
+    if not mx:
+        break
+    if ws >= target or cur + step >= ceiling:
+        break
+    buf.append(bytearray(step))
+    allocated += step
+cur, mx, ws = cgroup()
+print('allocated', allocated // (1024 * 1024), 'MiB', 'working_set', ws, 'current', cur, 'limit', mx, flush=True)
+time.sleep(${HOLD_SECONDS})
+\"
     fi
 " 2>&1 || true
 
@@ -76,8 +107,8 @@ echo ""
 echo ">>> Memory pressure injection complete."
 echo ""
 echo "Expected self-healing response:"
-echo "  1. ParasolOOMRisk alert fires (container >85% memory limit)"
-echo "  2. If OOMKilled: coordination engine detects restart, applies backoff"
-echo "  3. Coordination engine may patch memory limit via oomRemediation config"
+echo "  1. ParasolOOMRisk fires after memory stays above 85% for 30s"
+echo "  2. parasol-remediator deletes the ic-app pod"
+echo "  3. The Deployment starts a replacement pod"
 echo ""
 echo "Verify: oc get events -n ${NAMESPACE} --sort-by='.lastTimestamp' | tail -10"

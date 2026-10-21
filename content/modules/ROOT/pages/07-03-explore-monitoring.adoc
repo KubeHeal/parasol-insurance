@@ -21,6 +21,7 @@ Expected output:
 ----
 NAME                                          AGE
 servicemonitor.monitoring.coreos.com/parasol-insurance   2m
+servicemonitor.monitoring.coreos.com/qwen-metrics        2m
 
 NAME                                                    AGE
 prometheusrule.monitoring.coreos.com/parasol-insurance-alerts   2m
@@ -53,7 +54,7 @@ rate(container_cpu_usage_seconds_total{namespace="parasol-insurance", container!
 . In the {ocp} Console, navigate to **Observe** > **Alerting** > **Alerting rules**
 . Search for `Parasol`
 
-You should see four rules:
+You should see five rules:
 
 [cols="2,1,3"]
 |===
@@ -61,7 +62,7 @@ You should see four rules:
 
 | `ParasolOOMRisk`
 | Critical
-| Memory usage > 85% of limit for 1 minute
+| Memory usage > 85% of limit for 30 seconds
 
 | `ParasolCrashLooping`
 | Critical
@@ -69,14 +70,18 @@ You should see four rules:
 
 | `ParasolCPUThrottling`
 | Warning
-| CPU throttled > 25% of the time for 5 minutes
+| More than 25% of CPU periods throttled
 
 | `ParasolDBConnectionFailure`
 | Critical
-| Zero available replicas for the `claimdb` deployment for 1 minute
+| NetworkPolicy `chaos-block-db-access` is present for 30 seconds
+
+| `ParasolDiskPressure`
+| Critical
+| `claimdb` volume usage > 70% for 30 seconds
 |===
 
-All alerts should currently show as **Inactive** (green). We will change that in the next section!
+All alerts should currently show as **Inactive** (green). `parasol-remediator` in this namespace watches them and repairs the matching fault. We will change that in the next section!
 
 == Step 4: Query Metrics from a Notebook (Optional)
 

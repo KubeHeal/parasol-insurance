@@ -14,9 +14,10 @@ asciidoc:
     ssh_user: lab-user
     ssh_password: lab-user
     ssh_command: ssh lab-user@bastion.{guid}.example.opentlc.com
+    openshift_cluster_ingress_domain: apps.c9d0l4o7y2h5y5j.j2et.p1.openshiftapps.com
     minio-user: minio
     minio-pass: minio-parasol
-    minio-endpoint: http://minio.ic-shared-minio.svc.cluster.local:9000/
+    minio-endpoint: http://minio.parasol-insurance.svc.cluster.local:9000/
     git-clone-repo-url: https://github.com/rh-aiservices-bu/parasol-insurance.git
     git-clone-repo-branch: main
     rhoai: "Red Hat OpenShift AI"

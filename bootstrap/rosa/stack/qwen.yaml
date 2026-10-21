@@ -1,0 +1,65 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-cpu
+  annotations:
+    openshift.io/display-name: vLLM-CPU
+    opendatahub.io/apiProtocol: REST
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+  supportedModelFormats:
+    - name: vLLM
+      autoSelect: true
+  multiModel: false
+  containers:
+    - name: kserve-container
+      image: quay.io/rh-aiservices-bu/rhoai-lab-insurance-claim-vllm-cpu:v0.9.1
+      command:
+        - python
+        - -m
+        - vllm.entrypoints.openai.api_server
+      env:
+        - name: VLLM_CPU_KVCACHE_SPACE
+          value: "2"
+        - name: OMP_NUM_THREADS
+          value: "1"
+        - name: VLLM_CPU_OMP_THREADS_BIND
+          value: all
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen
+  annotations:
+    openshift.io/display-name: qwen
+    serving.kserve.io/deploymentMode: RawDeployment
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    model:
+      runtime: vllm-cpu
+      modelFormat:
+        name: vLLM
+      storageUri: oci://quay.io/rh-aiservices-bu/qwen2.5-0.5b-quantized.w8a8-modelcar:0.0.1
+      args:
+        - --port=8080
+        - --model=/mnt/models
+        - --served-model-name=qwen2.5
+        - --max-model-len=2048
+      resources:
+        requests:
+          cpu: "1"
+          memory: 4Gi
+        limits:
+          cpu: "4"
+          memory: 6Gi

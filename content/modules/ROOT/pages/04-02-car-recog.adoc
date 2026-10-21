@@ -1,6 +1,8 @@
 = Car recognition
 include::_attributes.adoc[]
 
+NOTE: ModelMesh is not deployed on this ROSA cluster. The image exercises on this page cannot be executed here.
+
 == Introduction
 
 In our last notebook we confirmed that the YOLO model could identify cars in a photograph.

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: parasol-remediator
+  namespace: parasol-insurance
+  labels:
+    app: parasol-remediator
+    app.kubernetes.io/part-of: kubeheal-demo
+    app.kubernetes.io/component: remediator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: parasol-remediator
+  template:
+    metadata:
+      labels:
+        app: parasol-remediator
+        app.kubernetes.io/part-of: kubeheal-demo
+    spec:
+      serviceAccountName: parasol-remediator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: remediator
+          image: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/scripts/remediate.sh"]
+          env:
+            - name: NAMESPACE
+              value: parasol-insurance
+            - name: PROMETHEUS_URL
+              value: https://thanos-querier.openshift-monitoring.svc:9091
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: service-ca
+              mountPath: /etc/pki/service-ca
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: parasol-remediator-script
+            defaultMode: 0555
+        - name: service-ca
+          configMap:
+            name: openshift-service-ca.crt

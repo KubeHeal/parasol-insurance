@@ -1,6 +1,8 @@
 = Pipeline for processing claims
 include::_attributes.adoc[]
 
+NOTE: This ROSA cluster has no per-user pipeline server and no ModelMesh. Do not set `detection_endpoint` to `http://modelmesh-serving.{user}:8008`. That host does not exist here. Skip the pipeline run on this page.
+
 == What will the pipeline do?
 Now that we have the web app deployed, we can see that some claims are still unprocessed.
 

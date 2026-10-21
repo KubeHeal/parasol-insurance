@@ -51,7 +51,7 @@ parasol-insurance namespace              self-healing-platform namespace
 ┌────────────────────────────┐          ┌───────────────────────────────────┐
 │ ic-app (Flask + React)     │◄──heal───│ coordination-engine (Go)          │
 │ claimdb (PostgreSQL)       │          │                                   │
-│ ServiceMonitor ────────────┼──scrape─►│ parasol-anomaly-detector          │
+│ ServiceMonitor ────────────┼──scrape─►│ anomaly-detector                  │
 │ PrometheusRule             │          │   (KServe InferenceService)       │
 └────────────────────────────┘          └───────────────────────────────────┘
          │                                           ▲

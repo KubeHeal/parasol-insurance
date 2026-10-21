@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: showroom
+
+resources:
+  - namespace.yaml
+  - rendered.yaml
+  - ui-config.yaml
+
+patches:
+  - path: content-ui-config-patch.yaml

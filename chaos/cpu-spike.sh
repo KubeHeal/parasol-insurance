@@ -1,8 +1,8 @@
 #!/bin/bash
 # cpu-spike.sh — Inject CPU saturation into the Parasol Insurance app
 #
-# Triggers: ParasolCPUThrottling alert, Isolation Forest anomaly detection
-# Expected: Coordination engine detects anomaly, scales or restarts deployment
+# Triggers: ParasolCPUThrottling alert
+# Expected: parasol-remediator deletes the ic-app pod
 #
 # Usage: ./chaos/cpu-spike.sh [NAMESPACE]
 
@@ -34,7 +34,7 @@ fi
 echo "Target pod: ${POD}"
 echo ""
 echo ">>> Injecting CPU spike (${CPU_WORKERS} workers for ${TIMEOUT})..."
-echo "    Watch for ParasolCPUThrottling alert and anomaly score spike"
+echo "    Watch for ParasolCPUThrottling. The parasol-remediator deletes the pod."
 echo ""
 
 oc exec -n "${NAMESPACE}" "${POD}" -c "${CONTAINER}" -- /bin/sh -c "
@@ -55,8 +55,8 @@ echo ""
 echo ">>> CPU spike injection complete."
 echo ""
 echo "Expected self-healing response:"
-echo "  1. ParasolCPUThrottling alert fires (>25% throttle time)"
-echo "  2. Isolation Forest model detects CPU anomaly"
-echo "  3. Coordination engine scales HPA or restarts deployment"
+echo "  1. ParasolCPUThrottling fires when more than 25% of CPU periods are throttled"
+echo "  2. parasol-remediator deletes the ic-app pod"
+echo "  3. The Deployment starts a replacement pod"
 echo ""
 echo "Verify: oc top pods -n ${NAMESPACE}"

@@ -11,8 +11,7 @@ On this ROSA cluster the shared claim application is already deployed in the `pa
 
 __Note: if you are using the lab-deployed instructions, the values below will render properly. If not, like when using the rendered instructions from the Github repo, placeholder values will appear.__
 
-* Your account id: `{user}`
-* Your password: `{password}`
+This cluster uses an HTPasswd identity provider. It does not provision a per-student account named `{user}`. Log in with the cluster admin credentials supplied for this environment.
 
 In a new window or tab, open the following URL and log in:
 
